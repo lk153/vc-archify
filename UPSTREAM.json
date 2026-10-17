@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/tt-a1i/archify",
+  "license": "MIT",
+  "commit": "88d1ae4498b6a1df610badf690c5406882622d15",
+  "version": "3.1.0",
+  "syncedAt": "2026-10-17",
+  "vendored": {
+    "archify/": "skills/vc-archify/",
+    "viewer/": "packages/viewer/src/",
+    "docs/gallery/sources/": "gallery/sources/",
+    "docs/cases/life/*.json": "gallery/cases/life/"
+  }
+}

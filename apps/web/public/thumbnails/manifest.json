@@ -1,0 +1,66 @@
+{
+  "agent-tool-call.workflow": {
+    "sourceSha256": "d67965d50872c97e4ff3476271e645bf19fab6b3ab44e111bdb44b063e3aa36f",
+    "viewBox": "0 0 1108 684"
+  },
+  "production-deployment.architecture": {
+    "sourceSha256": "610a5614667e8f108bdcf1769c9d7af5c3ce0fb62be3ea50550b10eb752e4bda",
+    "viewBox": "0 0 1376 790"
+  },
+  "cache-miss.sequence": {
+    "sourceSha256": "f8486daa803fff6c295cecca4604c561fbbf9acb2e83326022b5a87639e8afe6",
+    "viewBox": "0 0 1080 580"
+  },
+  "release-delivery.workflow": {
+    "sourceSha256": "dbd5c174af66296caec372e7214cf4df7158b50a563508e16826b95ab8d1cd6c",
+    "viewBox": "0 0 720 900"
+  },
+  "incident-response.workflow": {
+    "sourceSha256": "630be98449925d2716ecb8439f404b2bff5fe65ba905b0ad0baea6d96890c526",
+    "viewBox": "0 0 720 900"
+  },
+  "product-analytics.dataflow": {
+    "sourceSha256": "8a635db9e51a5b1a8d2955b9d66f5b9a450e0a298432ce8f2e2f0be11f372e05",
+    "viewBox": "0 0 1080 520"
+  },
+  "async-job-roundtrip.sequence": {
+    "sourceSha256": "b8c6c52f1763ede2933c77deb8da59b3e06917bc41d27e66df896136456b859a",
+    "viewBox": "0 0 820 920"
+  },
+  "event-stream.dataflow": {
+    "sourceSha256": "3bdd77674282009c7c68d588cf8a3c495bc98a3be1b9c45327fd1801a6f83a23",
+    "viewBox": "0 0 1080 780"
+  },
+  "agent-run.lifecycle": {
+    "sourceSha256": "5ba36f5ce91ed428cb48b599e275424916d82b619b9a3231cbd1bbc3966fc54b",
+    "viewBox": "0 0 1152 500"
+  },
+  "deployment-release.lifecycle": {
+    "sourceSha256": "e3dc105d03c1c9881160006cdace23cb5d8533803e337caf0ec287c64e775275",
+    "viewBox": "0 0 1284 680"
+  },
+  "web-app.architecture": {
+    "sourceSha256": "95e051b27a9e4a3307e194c0f666fca4af51470be7e2228d400ff48aea5b353b",
+    "viewBox": "0 0 1080 588"
+  },
+  "orders.erd": {
+    "sourceSha256": "1777a374647084466f4d7ce3a968004be6ab70ac9cf82459b96bed7c556cdfdd",
+    "viewBox": "0 0 999 488"
+  },
+  "job-search.lifecycle": {
+    "sourceSha256": "2f52b89139828ad0aef88792f42c15121cd1e8061f5de4a11d5523fa080f6f57",
+    "viewBox": "0 0 1326 326"
+  },
+  "leave-plan.workflow": {
+    "sourceSha256": "9bac5b7a173bc0203f259ec33b82402fae4e98732f524f422c3d87417b1e1d5b",
+    "viewBox": "0 0 1106 408"
+  },
+  "monthly-money.dataflow": {
+    "sourceSha256": "2f2ffff81a3371136738a14a9f5eea7b2d1357795e5d5a1a1ce044f301b2961f",
+    "viewBox": "0 0 853 626"
+  },
+  "renting.sequence": {
+    "sourceSha256": "16537ff83be33bb63d4990260027e529b7aaf7c0f1005fb4f87c15c026322010",
+    "viewBox": "0 0 1080 640"
+  }
+}

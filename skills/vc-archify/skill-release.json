@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "skillId": "archify",
+  "channel": "stable",
+  "version": "3.1.0",
+  "source": {
+    "repository": "https://github.com/lk153/vc-archify"
+  },
+  "updateManifestUrl": "https://tt-a1i.github.io/archify/skill-updates/archify/stable.json"
+}

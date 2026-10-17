@@ -1,0 +1,80 @@
+# Quality gates (Plan §5). Pull requests run the lean set (Chromium only) to
+# stay inside free GitHub Actions minutes; main runs the full browser matrix.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      E2E_FULL_MATRIX: ${{ github.event_name == 'push' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm version comes from package.json#packageManager; Node 24 comes from
+      # devEngines.runtime (pnpm downloads it), so there is no setup-node step.
+      - uses: pnpm/action-setup@v4
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:engines
+      - name: Viewer template is up to date
+        run: pnpm viewer:check
+      - name: Engine self-check
+        run: pnpm vc-archify doctor
+      - name: Engine render, parity and contract tests
+        run: pnpm --filter @vca/render test
+
+      - name: Build site (browser engine + gallery + next build)
+        run: pnpm --filter @vca/web build
+      - name: Typecheck
+        run: pnpm --filter @vca/web exec tsc --noEmit
+      - name: Engine browser gate (containment, readability, viewer chrome, themes)
+        # Uses the runner's Google Chrome; known upstream deviations are listed in
+        # scripts/browser-check-baseline.json. Advisory until it has run green on the
+        # Linux runners (it was baselined on macOS): remove continue-on-error then.
+        continue-on-error: true
+        run: pnpm browser-check
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Playwright browsers
+        run: |
+          if [ "$E2E_FULL_MATRIX" = "1" ]; then
+            pnpm --filter @vca/web exec playwright install --with-deps chromium firefox webkit
+          else
+            pnpm --filter @vca/web exec playwright install --with-deps chromium
+          fi
+      - name: End-to-end tests
+        run: pnpm --filter @vca/web e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

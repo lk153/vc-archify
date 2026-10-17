@@ -1,0 +1,12 @@
+{
+  "name": "@vca/viewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "vc-archify viewer runtime sources (vendored from upstream Archify viewer/, MIT) and the template generator.",
+  "license": "MIT",
+  "scripts": {
+    "generate": "node scripts/generate-viewer.mjs",
+    "test": "node scripts/generate-viewer.mjs --check"
+  }
+}

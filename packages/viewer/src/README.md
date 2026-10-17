@@ -1,0 +1,935 @@
+# Viewer source
+
+Edit `reader-layout.js` for Adaptive Reader Layout, `viewer-chrome-layout.js`
+for navigation clearance, `viewer-camera.js` for camera interactions and
+transactions, `semantic-radar.js` for the overview map, `motion-governor.js` for
+motion mode and ownership, `node-finder.js` for node search and endpoint picking,
+`intent-trace.js` for hover/focus previews, `semantic-lens.js` for type selection
+and legend previews, `route-probe.js` for directed paths and Route Journey,
+`focus.js` for semantic selection, relationships, reachability and shared flow tokens,
+`tree-branches.js` for hierarchy expand/collapse (active only on tree diagrams),
+`export.js` for export menus, serialization, images, cards, clipboard and WebM,
+`export-cleanup.js` for its private SVG clone cleanup, `viewer.css` for the
+main Viewer stylesheet, and `template.source.html` for the remaining shell.
+`viewer.css` owns the complete main `<style>` block; the font-face block remains
+in the shell because it carries its license notice and embedded font data.
+`archify/assets/template.html` is the committed generated artifact, consumed
+unchanged by all ten renderers and the installed Skill. These maintainer
+sources live outside the packaged `archify/` directory.
+
+From `archify/`, run `npm run generate:viewer` after editing any source.
+`npm run check:viewer` verifies freshness without writing; root
+`npm run test:generated` and `npm run test:full` include that check. Shared Viewer changes also require rebuilding the checked-in
+Checkout comparison from its tracked snapshots. From the repository root, run:
+
+```sh
+node archify/bin/vc-archify.mjs compare architecture archify/examples/checkout-platform.base.architecture.json archify/examples/checkout-platform.head.architecture.json examples/checkout-platform-delta.html --receipt examples/checkout-platform-delta.receipt.json --quality showcase --json
+```
+
+`test/architecture-delta.test.mjs` verifies those artifact and receipt
+bytes. Rebuild other affected examples and distribution outputs according to
+[Contributing](../CONTRIBUTING.md#packages-and-generated-artifacts).
+
+Assembly inserts JavaScript fragments verbatim at fixed markers.
+The CSS fragment is authored at column zero and reindented four spaces when it
+is inserted into the shell's `<style>` block; this preserves the delivered
+template bytes while keeping the standalone source easy to edit.
+Reader, Chrome Layout, Camera, Radar, Motion Governor, Finder, Intent Trace, Semantic Lens, Route Probe, Focus and Export
+extractions preserve delivered HTML bytes. Export cleanup adds a
+private function and a call, changing script bytes but preserving cleanup order
+and SVG output. All JavaScript fragments retain classic-script scope and
+initialization order.
+Generated output is not a second editing
+surface; release identity changes also belong in `template.source.html`.
+
+## Export contract
+
+`export.js` contains the complete Export heading and IIFE. It initializes once
+at its original position after Theme/Preset and before Motion Governor and
+Source Evidence. `export-cleanup.js` stays private to that closure. Assembly has
+one explicit child relationship: Export must contain exactly one EXPORT_CLEANUP
+marker and no other known marker. The shell owns EXPORT; all other fragments
+reject nested markers. Export is expanded before Cleanup in the fixed list,
+without changing the generated script's execution order. This is not a recursive
+loader or a second runtime initialization step.
+
+### Interface and dependencies
+
+The interface includes all nine `Archify.exportMenu` methods: open, close, isOpen,
+run, shareCard, downloadRouteShareCard, downloadReachShareCard, syncRouteShare,
+and syncReachShare. The same closure installs
+`Archify.motion.canRecord` and `recordWebm`; this recording capability is distinct
+from Motion Governor. Return values and synchronous/asynchronous failure modes
+are part of the interface, not normalized by the extraction.
+
+- Initialization requires the export menu, trigger and Route/Reach menu items;
+  it probes format/clipboard/recording support, registers listeners and creates
+  one toast live region. Later calls require the main diagram SVG and use the
+  existing header, document title, font style and computed theme/preset styles.
+- Shared viewerText, viewerCount and hasDrawableGeometry remain in classic-script
+  scope. The last helper verifies drawable semantic edges in export snapshots.
+- Menu open looks up Preset and Semantic Lens at call time, preserving optional
+  checks, close arguments and preview clearing. Route Probe and Focus provide
+  exportSnapshot/reachabilitySnapshot at sync/export time; their later script
+  positions do not justify early capture or new initialization dependencies.
+- Preset, Lens, Finder and Presentation close Export through its existing
+  interface. Guide/Presentation open it; Route Probe and Focus synchronize their
+  share items. The DOM menu routes clicks to the private ordinary PNG copy path.
+  External consumers of Archify.motion retain both recording methods.
+
+### DOM, styles and output state
+
+- Menu state is its open class plus the trigger's aria-expanded. Navigation skips
+  hidden/disabled items; ArrowUp/Down wrap, Home/End select endpoints, Escape
+  restores trigger focus, Tab/outside clicks close without forced restoration.
+  Ordinary export/copy uses close(true); Route/Reach downloads use close(false).
+- The query openExport=1 waits for fonts and two animation frames; without the
+  Font Loading API it retains the 200ms fallback. No new readiness coordinator
+  is introduced. Toast reuses role=status, a frame callback and a 1500ms timer.
+- shareCard requires an explicit route/reach variant, returns a PNG Blob and
+  does not download or write a receipt. Semantic variants re-read their current
+  provider, reject unavailable/invalid snapshots,
+  and retain the existing clone geometry/identity checks. Menu visibility does
+  not grant a stale snapshot permission to export after Route/Reach is cleared.
+- Downloaded SVG embeds both themes. Raster/card/recording serialization locks
+  current theme variables after host CSS. CSS rule filtering, stylesheet order,
+  cross-origin cssRules catches, embedded fonts and temporary theme probes stay
+  unchanged. Moving CSS can change export output even when the live page looks
+  similar; styles remain in the main template.
+- Cleanup affects the clone. Canonical output excludes transient camera/focus/
+  preview/route state; semantic cards intentionally apply their own share
+  markers and styles afterwards. This does not promise that menu-driven focus
+  changes leave all live preview state untouched.
+- Raster scale chooses the largest fitting member of 4/3/2/1, falling back to 1
+  even when that size exceeds the advisory pixel cap. Cards remain 1200x630.
+  File names, MIME probes, quality and background choices remain unchanged.
+- run rejects unsupported formats, including the removed ordinary share-card
+  format, before starting. Supported exports clear old export receipts. Success
+  writes format/bytes/canonical and optional dimensions/variant/clean flags. Route/Reach downloads
+  return their Blob and mark canonical=false. Their failures report share-card
+  errors and alert. Regular run resolves through its existing handlers; failures
+  record an error and alert, except WebM disables its item and shows a toast.
+- Ordinary PNG copy only toasts on success. Unsupported copy can return undefined.
+  ClipboardItem construction with a Promise stays inside the user gesture;
+  synchronous rejection falls back to a Blob, asynchronous write rejection does
+  not take that fallback. SVG serialization can throw before run constructs its
+  Promise chain. No common wrapper changes these distinctions.
+
+### Resources and verification
+
+| Owner/path | Lifetime |
+| --- | --- |
+| Auto-theme probes | Detached after computed-style sampling, including finally on failure |
+| Download URL/anchor | Anchor appended/clicked/removed synchronously; URL revoked after 1000ms |
+| Raster/card SVG URL | Lives until Image load/draw or error; revoked before toBlob completion, with existing catch cleanup |
+| 录制背景 URL | 从背景加载持续到录制结束，由下文说明的统一终态在成功或失败后释放 |
+| 录制 tracks/rAF | 统一终态停止已创建的 tracks 并取消动画帧回调，晚到事件不重复清理 |
+| 录制定时器 | 统一终态取消录制时长和最终 flush 定时器，防止失败后再次操作编码器 |
+| Toast 定时器 | 保留既有有界回调和状态检查，不增加共享 busy 状态或取消协议 |
+
+recordWebm retains duration/fps options, defaults, minimums, MIME selection,
+geometry-driven scene and encoder flush timing. This table describes existing
+paths; it does not add universal recovery from arbitrary browser API exceptions.
+
+`export-browser.test.mjs` exercises native menu input, unavailable formats,
+auto-open/themes, real semantic cards, clipboard call order/fallback, raster
+failures/retry, synchronous serialization failure, real WebM decode and recorder
+failure cleanup. It intercepts download and clipboard boundaries without changing
+production serialization. `export-cleanup-browser.test.mjs` supplies five-mode
+canonical SVG and real raster/theme coverage. Existing share-card and WebM smoke
+checks retain their broader artifact contracts. Set ARCHIFY_CHROME for browser
+checks; ARCHIFY_EXPORT_RUNTIME_EVIDENCE optionally saves runtime observations,
+menu screenshots and a real recording. CI runs the browser suite without relying
+on optional evidence capture. Compare the same final tests on a fixed baseline
+and candidate; encoding bytes/timing are not a deterministic oracle for video.
+
+## Focus / Semantic Explorer contract
+
+The complete IIFE initializes once after Source Evidence,
+before Intent Trace. Reader/Chrome Layout, Camera, Finder, Route
+and Lens keep their later positions. Required diagram SVG, Passport controls and
+relationship list remain required DOM. Shared viewerText/viewerCount/viewerKindLabel
+and hasDrawableGeometry stay in the template's classic-script scope.
+
+The interface is thirteen Focus methods: set, setMany, clear, copyLink, reach,
+clearReach, reachabilitySnapshot, inspectRelationship, inspectRelationshipById,
+reposition, relationship, reachability and active. The same closure also installs
+Archify.flowTokens.create/kind/path before Route can consume them. This shared
+provider is part of Focus ownership, not a second initialization step.
+
+- set writes neighborhood mode into its supplied options object and delegates to
+  setMany. setMany clears Lens preview/selection and, unless preserveRoute is true,
+  Route before filtering IDs. An empty/unknown selection can therefore return false
+  after those side effects. Valid IDs are deduplicated in supplied order. Repeating
+  the same ordered selection toggles through ordinary clear unless toggle is false.
+- A single neighborhood matches incident edges and neighboring nodes. Multi-node
+  or explicit selection mode matches only edges whose endpoints are both selected.
+  Focus counts duplicate edge keys once while marking every matching fragment.
+  hideChip, label, mode, updateUrl, urlKey and urlValue keep their existing defaults.
+- clear removes Reach, Intent, relationship preview/pin and Focus markers;
+  it hides Passport and resets its existing fields.
+  It resets Camera unless preserveView, updates the URL unless updateUrl is false,
+  and restores a previously single selected node only when restoreFocus is true.
+  clearReach and clearRelationshipPreview have narrower effects. Repeated clear
+  does not gain a no-op return or stronger cancellation guarantee.
+- active returns null, a single ID or a copied array. relationship returns a fresh
+  record or null; reachability returns copied node/edge arrays. Snapshot results
+  are constructed from current authored nodes, edges and validated Reach state.
+- Passport uses existing label/kind/detail/context/tag/brand/source metadata. The
+  Source Evidence provider owns repository/node lookup; Finder searches source paths.
+  Focus owns displaying or hiding evidence and building the existing safe links.
+  Source Evidence appends the localized verified source count to node ARIA
+  labels at initialization, preserving the original label for canonical export.
+  Only revision-verified payload sources contribute; zero counts add no hint.
+  Repeated initialization restores the original label first, so hints never
+  accumulate and disappeared evidence removes the old hint. This adds no SVG
+  badge, shape, or geometry and exposes no beacon installation interface.
+  Relationship rows are grouped out/in/loop, retaining authored order within each
+  group and deduplicating keys. Up/Down/Home/End clamp within the resulting rows.
+  A diagram-container ResizeObserver requests the existing placement frame while
+  Passport is visible, so manual positions are reclamped after Reader layout
+  settles. Active dragging retains its existing placement guard.
+- Relationship intent priority is pin, then focus, then hover. Clearing one intent
+  may restore another. Pointer transitions within the same row/hit target do not
+  reset intent; touch and non-fine-pointer hover retain their filters. Direct hover
+  waits 90ms (0 with reduced motion), rechecking pointer, pin and owner state when
+  the timer fires. Clearing preview cancels that timer; it does not always unpin.
+- Direct hit targets are created once from drawable path/line/polyline fragments.
+  Same-key compatible fragments share one record; conflicting identity or duplicate
+  authored relationship IDs make records ineligible. Hit geometry is cloned, with
+  original path/points and existing transform handling retained. Focus does not
+  repair malformed geometry or derive connectivity from labels.
+- Direct pointer exploration is blocked by embed, Guide, panning, ordinary active
+  Focus, Route picking/result and Lens under the original
+  predicates. Pointer and keyboard paths retain their different guards. Direct
+  target arrows wrap, Home/End choose endpoints, Enter/Space inspect or toggle, and
+  pinned Escape clears with updateUrl:false. Global Escape/shortcuts stay outside.
+- Pinning first clears the curated view with the existing options, focuses the
+  relation source, previews the matching Passport row and marks its hit target.
+  Camera reveal remains a call-time lookup with the original one-rAF retry if
+  Camera is not initialized yet. No polling service or dependency capture is added.
+- Reach traverses authored direction breadth-first, deduplicates edge keys and
+  preserves the original traversal/edge order for cycles, parallel edges and loops.
+  It requires one selected origin and at least one other reachable node; repeated
+  direction toggles unless toggle:false. It clears curated view/relationship state,
+  updates Export controls and optionally URL/Camera according to existing options.
+- reachabilitySnapshot fails closed when selection, Reach mode/attributes, depths,
+  live node multiplicity or edge identity disagree. Each edge key requires exactly
+  one drawable fragment, though compatible shapeless fragments are allowed. Extra
+  marked nodes/edges, multiple drawable fragments and inconsistent endpoints/IDs
+  yield null. It does not sanitize or silently rederive an invalid live snapshot.
+- flowTokens consumes existing shape geometry, edge classes and node kinds. Kind
+  priority remains security, event, data, state, call. create produces a detached
+  token with the existing path, duration/class options and null behavior. Motion
+  ownership remains in its existing module. If the visual `d` runs in reverse,
+  `data-motion-path` supplies the canonical from→to semantic path shared by
+  Focus, Intent Trace, Semantic Lens, Route Probe and WebM.
+- Relationship pulse removes any previous pulse, clones existing shape geometry
+  and installs at most one flow token, retaining overlay placement and animation
+  end/cancel removal. Embed, hidden, paused Motion and reduced motion prevent new
+  pulses. Visibility/reduced-motion callbacks remove pulse without universally
+  clearing static selection, preview or pin. Motion observes shared attributes;
+  Focus does not gain a new owner token or controller.
+- Hash restoration prioritizes relation, then focus/reach; a view hash avoids the
+  ordinary no-focus clear branch. Invalid relation and embed relation restore use
+  existing clear behavior. Focus does not become the parser for Route/Lens.
+  No new handling of arbitrary malformed IDs or selector escaping is introduced.
+- copyLink requires exactly one selected node, prefers an authored pinned relation
+  URL, otherwise copies focus plus optional reach. It preserves the non-hash URL,
+  clipboard/fallback results and 1600ms feedback. Older feedback callbacks still
+  render the then-current copy action; no generation or cancellation policy is
+  added. Fallback textarea cleanup and promise return values are unchanged.
+
+| State or surface | Owner and dependencies |
+| --- | --- |
+| Selected IDs, hover/focus/pin/preview references, reachability, hit targets, direct timer, lens rAF | Focus closure; page lifetime, no destroy interface |
+| data-focus-active/match/selected, node aria-pressed, Passport content/hidden/expanded/top | Focus writes/clears; Camera reveals/resets and Radar syncs through call-time lookups |
+| data-reach-active/match/origin/depth and Passport Reach controls | Focus; Export consumes syncReachShare and reachabilitySnapshot |
+| data-relationship-preview/direct/pin-active, preview source/target and row/hit ARIA | Focus; Lens/Route/Intent/Guide state controls existing eligibility rules |
+| Relationship hit/pulse overlays and flowTokens construction | Focus creates; canonical export removes transient clones through Export Cleanup |
+| Source Evidence payload/repository links, camera transactions, other feature state | Their existing modules; Focus remains a caller, with original options and order |
+| SVG/document capture, node/row/hit keyboard and pointer subscriptions, passive scroll, resize, visibility, media listeners | Original execution positions and capture/passive/once semantics retained |
+
+Export triggers may move focus or cause normal input-state handoff before the clone
+is made. Verify live state and clone state separately; do not assert that every
+export leaves every focus-backed preview unchanged. Author geometry, stable IDs,
+viewBox and static SVG output remain unchanged by this source extraction.
+
+Browser checks exercise actual node/relationship inputs, pointer delay, pin priority,
+Passport grouping, cyclic Reach and strict rejection, cold/hash URLs, copy feedback,
+real pulse end/cancel, media preference transitions, actual SVG export, three widths
+and dark/light screenshots. Explicit DOM/clipboard/visibility/pointerType fixtures
+cover controlled edge cases and are not claims about OS permissions or devices.
+
+## Route Probe contract
+
+The complete IIFE initializes once after Finder and before Semantic Lens, in the
+existing classic-script scope. It registers listeners then synchronously restores
+the initial hash. Later hashchange restoration runs in rAF. Required inputs are
+the document root, diagram container/direct SVG, Route/Journey controls, shared
+`viewerText`, `viewerCount` and `hasDrawableGeometry`. The latter stays shared
+with Focus and Export; Lens remains a runtime lookup because it initializes later.
+
+The nineteen methods remain `begin`, `choose`, `clear`, `toggle`, `escape`,
+`copyLink`, `playJourney`, `pauseJourney`, `showOverview`, `selectJourneyIndex`,
+`syncMotion`, `isJourneyPlaying`, `finderContext`, `finderOpening`, `finderClosed`,
+`openFinder`, `exportSnapshot`, `active` and `result`. There is no mount/unmount API.
+
+- Route owns mode, endpoint IDs, path node arrays and exact edge DOM references,
+  Journey index/playing/complete, timer/generation/elapsed time, Motion token,
+  overlays and its panel/listener state. Mode is idle/source/target/result;
+  panel error is presentation state and can coexist with target mode. `active`
+  returns mode or null. `result` returns copied nodes and scalar state only in
+  result mode; it does not certify an exportable snapshot.
+- Nodes and edges are read dynamically. The node map keeps the last element per
+  ID; it does not use Lens's kind filter or first-ID rule. Outgoing relationships
+  require existing endpoints and ignore self-loops. BFS follows directed DOM edge
+  order, keeping the first reached path and exact edge references. There is no
+  grouping by edge key, weighted search, new sort order or persistent graph index.
+- Source selection marks reachable targets, including the existing no-outgoing
+  outcome. In target mode, same-node/unreachable choices return false and render
+  error while retaining target mode. Unknown IDs and choices outside picker mode
+  retain their existing early returns. Finder's allowed list does not constrain
+  every public choose call. Results retain full path/hops and begin in overview.
+- `begin` rejects embed, clears Lens preview/active selection, captures an explicit
+  source or single Focus node, clears old Route, then clears Intent/Focus
+  and closes Finder/Radar in the existing order. Optional checks and options stay
+  unchanged. Multi-Focus and invalid sources are not normalized into new behavior.
+- `clear` returns undefined, closes only the applicable route Finder context,
+  invalidates Journey work and removes Route state, overlays and docking, then
+  updates controls/Export. Camera resets only when previously active and without
+  `preserveView:true`; `updateUrl:false` retains URL. Only `restoreFocus:true`
+  requests trigger focus. Repeated clear can still update controls and URL.
+- Pause retains path and position; overview retains path but clears Journey
+  position; clear removes the path. Escape returns paused, overview, then cleared
+  across those states. Focus requests retain their original targets even if a
+  browser refuses focus on a disabled control. Finder owns its search panel;
+  Route supplies allowed IDs/badges, finder-open state and close/docking callbacks.
+- Journey marks past/current/future nodes and the exact incoming edge. Position
+  zero has no incoming pulse. Manual stepping stops playback and resets completion;
+  arrows clamp at endpoints. Native chip focus pauses, while Enter/Space chooses
+  the position. Camera reveal keeps the existing neighbor slice and parameters.
+- Playback requires result, multiple nodes, non-embed, visible document and a
+  capable, unpaused Motion Governor. Dwell is 1100ms per position. Pause normally
+  retains elapsed time; resume uses the remainder, new positions use a fresh dwell.
+  Date.now, generation invalidation, timer order and synchronous handoff resets
+  stay intact. Final dwell completes without looping; replay restarts at zero.
+  Returning to visible/Live does not automatically restart playback.
+- Journey pulses actively claim/release a Motion token, alongside Governor's
+  attribute-derived ownership. A released token does not imply an empty global
+  owner. Owner callbacks, animationend and the 860ms fallback retain their order
+  and isConnected guards. Clear invalidates playback but does not introduce a
+  universal cancellation mechanism for every delayed callback.
+- Overlay clones preserve path/line/polyline geometry, transform, removal lists,
+  pathLength=1 and insertion position. Overview can insert an empty overlay when
+  selected edges have no cloneable shapes; Journey rejects that empty pulse.
+  No common overlay factory or geometry recomputation is introduced.
+- `exportSnapshot` is stricter than interaction: it requires a consistent result,
+  unique extant path nodes, attached edges, nonempty distinct keys and consistent
+  from/to/edge-id across each key's fragments. Exactly one fragment must be
+  drawable according to the shared geometry check, and it must be the selected
+  edge. Returned data contain no DOM references. Export consumes the snapshot;
+  it owns Share Card rendering, rejection receipts and clone cleanup.
+- URL updates replace the hash with encoded source~target and preserve query.
+  Journey progress is never serialized. Missing/empty route clears active state;
+  malformed pairs/unknown endpoints return early. Valid but same/unreachable
+  endpoints retain begin/choose error state and the original hash. Existing
+  encoding, asynchronous hashchange order and embed guards are unchanged.
+- Copy returns a Promise, preferring clipboard and falling back to temporary
+  textarea/execCommand. Non-result resolves false. Text/ARIA feedback resets after
+  1600ms even when subsequent cleanup has occurred; no debounce/cancellation is
+  added. SVG capture listeners intercept picker click/Enter/Space with
+  stopImmediatePropagation. With data-just-panned they let events through; later
+  Focus handlers can still consume a key and clear Route. Global R/Slash/Escape
+  and other modules' callers stay outside this source.
+- Docking compares top/bottom overlap with route nodes or the start node, nav
+  weight 4 and an out-of-bounds penalty; ties choose top. Hidden panels remove
+  dock, zero-size panels return without replacing it. Scroll measures directly;
+  requests retain rAF plus 120/560ms rechecks, without coalescing or cancellation.
+  This is not Lens's left/right or 720px eligibility algorithm.
+- Route produces node/edge data-route-* attributes, step styles and panel/control
+  DOM/ARIA. Existing CSS owns themes, flow, Still/reduced motion, print/embed and
+  responsive rendering. Focus/Lens clear Route; Camera/Motion/Guide can pause it.
+  These dependencies remain explicit runtime collaboration after the source split.
+
+`route-probe-browser.test.mjs` complements static Route/Journey/Share Card tests
+with actual input, playback, handoffs, snapshots, themes and SVG export. Graph,
+clock, hidden-page, geometry and clipboard fixtures isolate specific boundaries;
+they do not certify hardware input, OS clipboard permission or all-screen collision
+freedom. Serialization is distinguished from later download/global-click effects.
+
+## Semantic Lens contract
+
+The complete IIFE initializes once after Route Probe and before Guide, in the
+existing classic-script scope. Legend decoration, listeners, `renderKinds()` and
+`syncFromHash()` retain their order. The ten methods remain `open`, `close`,
+`toggle`, `clear`, `clearPreview`, `select`, `copyLink`, `isOpen`, `active`, and
+`kinds`. Required inputs are the document root, diagram container/direct SVG,
+Lens controls and shared translation helpers; Legend Bridge is optional.
+
+- Selection, legend preview and panel visibility are separate states. Lens owns
+  selected kinds, legend entry/input references, active preview, opener, runtime
+  decoration, flow overlay and page-lifetime listeners/callbacks. `active()`
+  returns a copied array or null; `isOpen()` reads panel visibility; `kinds()`
+  dynamically collects counts. There is no mount/unmount API or persistent index.
+- Collection requires node ID and kind, keeps the first element per nonempty ID,
+  and treats empty kind as neutral. Sort is count descending then translated
+  label. Relationships group by edge key, otherwise from/to/label. Single-kind
+  selection marks touching relationships and peers; two kinds include only
+  direct cross-kind relationships, with direction relative to selection order.
+- `select` clears legend preview before validation. Unknown or third kinds return
+  false; existing kinds toggle off. Removing the last kind returns false without
+  the Camera reset performed by explicit `clear`. Adding the first kind clears
+  Focus, Route and Intent in that order, with existing options.
+  These real callers can affect Camera; the second kind does not repeat prepare.
+- `close` returns false and hides only the panel, retaining selection, hash and
+  flow. It normally restores the current opener's focus. `clear` returns false,
+  clears selection/Lens SVG state and docking, updates URL unless disabled,
+  resets Camera unless `preserveView:true`, and closes only for `closePanel:true`.
+  It does not itself clear legend preview. `clearPreview` returns undefined,
+  clears preview attributes but retains hovered/focused references, selection,
+  URL and panel state. A false return is not a guarantee of no side effects.
+- `open` rejects embed early, records the opener, closes Export/Finder/Radar/Guide
+  as currently implemented, renders and opens the panel, then docks/focuses in
+  rAF. It does not introduce a universal preview cleanup. Repeated/rapid calls
+  retain pending-frame ordering. Guide is initialized later and stays a runtime
+  lookup. Other module callers and the global L/Escape shortcuts stay in the shell.
+- Legend decoration is initialization-only. Zero-count entries get hit/badge
+  decoration but no button role; positive entries use roving tabindex and count
+  ARIA. One or two available entries use group, three or more use toolbar.
+  No bridge or embed skips decoration. Fonts-ready and resize remeasure authored
+  children, excluding runtime decoration, with the existing getBBox fallback.
+- Fine-pointer non-touch hover and native focus drive preview; focused entries
+  win during sync and relatedTarget guards internal transitions. Media query is
+  captured at initialization. Selection, open panel, Presentation, Focus, Intent,
+  Route and relationship preview gate new previews. The same active entry
+  can return early before checking blockers; no new observer guarantees instant
+  cleanup when another attribute changes. Preview writes node/edge match, selected
+  and peer attributes without committing selection, URL or flow overlay.
+- Legend arrows wrap; Home/End and Enter/Space preserve keyboard behavior and
+  opener restoration. Activation still opens after a rejected third selection.
+  Panel buttons rerender during click, so outside-click detection must retain
+  composedPath as well as contains and launcher exemptions. The dialog remains
+  non-modal; no focus trap or panel coordinator is introduced.
+- Flow count measures relationship groups. Zero/embed produces no overlay;
+  more than 24 sets quiet density without dropping matches/counts. Returning to
+  24 restores flow. Only each group's first member supplies transform/shapes;
+  unlike Intent, later members are not cloned. Shallow path/line/polyline clones
+  preserve authored geometry, the removal list, pathLength=1, direction and
+  step-times-0.08s delay. No shapes can mean an active selection without overlay.
+- URL updates replace the hash, preserving pathname/query. Hash restoration
+  filters unknown/duplicate kinds and keeps the first two, without opening or
+  normalizing the URL. Missing/empty lens clears an existing selection while
+  preserving view and URL; a nonempty all-invalid value retains selection.
+  Copy prefers clipboard then textarea/execCommand fallback, cleans the field
+  and restores feedback after 1600ms. It has no cancellation/debounce contract.
+- Docking removes the side attribute first. Hidden, width <=720 and zero-size
+  panels return right without writing it. Desktop compares selected-node overlap
+  plus legend/nav overlap weighted 1000, with 16px margins and ties going right.
+  Open/select and selected-open resize retain their triggers; no Camera observer
+  or guarantee of collision-free layout at every size is added.
+- Lens writes `data-lens-*`, `data-legend-preview-*`, legend decoration and panel
+  DOM/ARIA. Existing CSS owns themes, opacity, flow directions, reduced/Still,
+  print/embed and responsive rendering. Motion Governor observes semantic state
+  to derive owner; Lens does not claim/release it. Export Cleanup strips clone
+  state and decoration; it remains in its own module. Export serialization and
+  subsequent download/global-click effects are distinct observations.
+
+`semantic-lens-browser.test.mjs` covers five-mode initialization, trusted input,
+real capability handoffs, cleanup, URL/copy, themes, motion and SVG export.
+Explicit DOM/media/geometry/clipboard fixtures isolate boundary inputs; they do
+not certify touch hardware, OS clipboard permission, screen readers or arbitrary
+layout collision freedom. Static Lens/legend/flow checks remain useful alongside
+browser checks. This split narrows maintenance scope while preserving runtime
+collaboration and single-file delivery.
+
+## Intent Trace contract
+
+The complete IIFE initializes once after Focus, with
+the existing classic-script scope and listener order. Its interface remains
+`show(id, options)`, `clear(options)` and `active()`. It requires the diagram's
+direct SVG child, `#intent-trace-status`, document root and shared `viewerText`.
+Focus/Route active queries are runtime lookups; Route initializes later.
+
+- Intent owns active ID, hovered/focused node references, the entry timer,
+  preview overlay, Intent node/edge attributes and status text. Its listeners
+  last for the page lifetime; there is no mount/unmount API or persistent index.
+- `show` first rejects empty IDs or blocked requests, silently clearing the old
+  preview and returning false. An already-active ID returns true without
+  rebuilding, announcing or cancelling a pending entry timer. Other IDs clear
+  the old preview before lookup, including unknown IDs, which return false.
+  Isolated nodes can be active without an inserted overlay.
+- `clear` returns undefined, cancels the entry timer, clears active ID, removes
+  overlay/Intent attributes, and normally clears status. `announce:false`
+  retains status. It does not erase hovered/focused references, so later input
+  can reuse them. Only `show` with `announce === true` writes status; repeated,
+  rejected or silent requests can retain previous text.
+- Fine-pointer non-touch pointerover schedules entry after 90ms, or an
+  asynchronous 0ms under system reduced motion. Internal pointer transitions
+  are ignored through relatedTarget. `matchMedia` absence retains the current
+  fine-pointer fallback. User Still mode does not change this delay rule.
+- The entry callback checks the hovered reference before showing. Native
+  focusin records focus and shows immediately; pointerout/focusout update their
+  reference and run sync, which prefers focused over hovered. This local
+  preference does not extend to every scheduled callback. The existing
+  duplicate-show and retained-reference behavior is not a global priority or
+  suppression mechanism.
+- Non-node container pointerdown and window blur silently clear. Global Escape
+  remains in the template with its existing capability priority. Blocking is
+  evaluated by show: embed, Guide, panning, Lens, relationship preview,
+  and active Focus/Route. Changing a blocking attribute alone does not install
+  a new observer or promise immediate cleanup; callers retain their effects.
+- Every actual build reads semantic nodes and directed relationships from the
+  SVG. Counts deduplicate by edge key, or from/to/label fallback; DOM edge
+  members are still all marked/cloned. Self-loops are counted once as loops.
+  Only path/line/polyline shapes are shallow-cloned, using the existing attribute
+  removal list, wrapper transform and insertion position. Author geometry is
+  preserved; `pathLength=1` normalizes animation, not coordinates.
+- Incoming/outgoing labels describe direction relative to the previewed node.
+  Both animate along authored source-to-target geometry; incoming is not
+  reversed. The single 1.15s CSS animation does not clear the preview on end.
+  Reduced motion/Still retain the existing static preview styles.
+- Intent writes `data-intent-trace-active`, node/edge match and node-selected
+  attributes and the aria-hidden overlay. Existing CSS owns opacity, direction,
+  theme/preset and motion rendering; the overlay remains pointer-transparent.
+  Motion Governor observes the active attribute to derive ownership; Intent
+  never claims or releases an owner. Export Cleanup strips cloned Intent state,
+  while Intent clears the live diagram. Neither dependency moves into this file.
+
+`intent-trace-browser.test.mjs` covers
+five-mode initialization, real pointer/native focus handoffs, bounded timer
+cleanup, isolated timer and SVG fixtures, blockers and actual callers, real CSS
+completion, Motion ownership, reduced motion, themes and SVG export. Fixtures
+do not claim touchscreen hardware, background throttling or screen-reader
+verification. The extraction narrows maintenance scope without redesigning the
+existing runtime collaboration.
+
+## Node Finder contract
+
+The complete IIFE initializes once after Presentation and before Route Probe.
+It uses the existing classic-script scope and renders the initial list at that
+position. Its interface is `open`, `close`, `toggle`, `select`, `isOpen`,
+`context`, and the numeric `count` property. There is no mount/unmount API.
+
+- Finder owns its initial semantic-node index, visible result list, context,
+  panel rendering and page-lifetime listeners. `count` is the initial index
+  size, not the current result count. Changing the SVG later does not reindex.
+- Initialization requires the diagram SVG, Finder controls, Source Evidence
+  and the shared `viewerText`, `viewerCount`, and `viewerKindLabel` functions.
+  Source Evidence supplies search metadata; Finder does not verify repositories.
+  Route Probe and Semantic Lens initialize later, so their references remain
+  runtime `vc-archify.*` lookups with the existing availability checks.
+- Search preserves authored DOM order and the existing ID, label, type, text,
+  metadata, brand and source-reference matching. Queries are trimmed and
+  lowercased for substring matching. Connections are counted by distinct
+  directed from/to pairs, not edge keys or distinct neighbors.
+- Context comes from explicit `options.context`, otherwise the current Route
+  Probe picker, otherwise focus defaults. Requested fields shallowly override
+  defaults. `allowedIds: null` leaves all items available; `[]` leaves none.
+  This filters results only: public `select(id)` still searches the whole index.
+- Opening rejects embed before other work, clears Lens preview, closes Export
+  and Lens as currently implemented, resolves context, updates controls and
+  clears the query, then schedules input focus with rAF. Reopening repeats this
+  work. It does not establish a global exclusive-panel coordinator.
+- Closing hides the panel, clears the input and updates `aria-expanded`, but
+  retains context and rendered results until the next open/render. Ordinary
+  close returns focus to the trigger unless `restoreFocus:false`; route close
+  delegates focus and docking to Route Probe. Repeated close and pending input
+  focus retain their current ordering; there is no rAF cancellation mechanism.
+- Ordinary selection runs Camera `reset({automatic:true})`, Focus
+  `set(id,{toggle:false})`, then Camera `reveal([id],{includeNeighbors:true,
+  reason:'finder'})`, preserving optional checks and order. It closes without
+  restoring trigger focus and focuses the node with the existing preventScroll
+  fallback. An unknown ID returns false before these actions.
+- Route-source/target selection delegates to Route Probe `choose`. Missing or
+  rejected choices return false without the success path. A resulting target
+  state requests Camera reveal with `reason:'route-pick'`; then Finder closes
+  and focuses the node. This branch does not directly call ordinary Focus
+  selection; global event handlers retain their own effects.
+- Finder writes panel `hidden`/`data-context`, trigger `aria-expanded`, title,
+  input placeholder, list ARIA, result children, empty-state visibility and
+  status text. Route Probe owns its `data-finder-open` attribute through
+  `finderOpening`/`finderClosed`. Existing HTML/CSS remain in the template.
+- Input ArrowDown enters results and Enter selects the first visible result;
+  result arrows wrap and Home/End move to the endpoints. Escape prevents default
+  and stops propagation before closing. Outside clicks close without restoring
+  focus, except the existing `[data-node-finder-trigger]` exemption. Global `/`
+  handling, Guide and Route callers remain outside Finder. The dialog stays
+  non-modal; no focus trap or keyboard adapter is introduced.
+
+`finder-browser.test.mjs` exercises five-mode initialization, trusted keyboard/mouse input, real Route
+source/target collaboration, retained context, panel cleanup, themes, constrained
+layout, reduced motion and SVG export. Its metadata fixture isolates search
+inputs; it does not claim repository verification or brand-rendering coverage.
+The source split narrows maintenance scope while preserving runtime dependencies.
+
+## Reader contract
+
+- The IIFE initializes once, after the page DOM and shared
+  `Archify.waitForStableLayout` exist, before `viewerChromeLayout` and `view`.
+  It captures `.container`, `.diagram-container` and its direct child SVG,
+  optional header/card elements, and the initial viewBox ratio.
+- The public Interface remains `measure`, `schedule`, `whenStable`, `active`,
+  `receipt`, and `syncLegend`. Camera calls `syncLegend` while sampling its
+  rendered transform so a corner legend stays fixed through zoom transitions.
+  Viewer Chrome Layout calls `schedule` after changing the
+  navigation reserve and `whenStable` while probing layout. The browser
+  visual checker also uses `window.Archify.readerLayout.whenStable`.
+- Reader owns the outer width (`html`'s `--archify-reader-width`) and temporary
+  `data-reader-layout` / `data-reader-overflow` attributes. Automatic canvases
+  whose enlargement cap binds also use `data-reader-area` and
+  `--archify-diagram-min-height` to keep a normal viewport-sized reading area.
+  Uncapped and ineligible measures clear these values
+  and reset the recorded width. CSS consumes the width on `.container`.
+  Reader never writes canonical SVG geometry, viewBox or semantic IDs.
+- Renderers declare fitting independently of their UI or column metadata:
+  `data-reader-fit="width-first"` selects available desktop reading width;
+  `data-reader-fit="intrinsic-height"` selects height fitting. Both declare
+  automatic canvases and share the existing readability and enlargement limits.
+  Automatic Sequence and Waterfall canvases, and intrinsic v2 Workflow canvases
+  with expanded vertical stacks, declare `width-first`. A compact automatic
+  Sequence can fit the first screen while preserving authored text sizes;
+  longer sequences and the other width-first families retain vertical page
+  scroll, and overflow settling must not shrink them to viewport height.
+  Undeclared SVGs retain the ordinary ratio-based eligibility and fit; UI or
+  column attributes alone do not opt into either automatic fit. Other automatic
+  canvases retain height fitting. Explicit Workflow canvases retain their existing
+  fitting behavior. All automatic canvases cap
+  enlargement at 1.5 times the authored SVG width without reducing the outer
+  reading area. Capped SVGs are centered inside that area; uncapped diagrams
+  retain their existing natural flow. In a capped reader area, the original
+  SVG legend uses a temporary CSS transform to sit at the outer canvas's
+  bottom-left content corner, at its normal reading size through 25–100%
+  camera zoom. The group stays in the same SVG for hover/focus and export.
+  Compact automatic Sequences that fit the first screen also use this corner
+  placement, even when the enlargement cap does not bind. A legend that cannot
+  fit clear of the navigation dock keeps its original position. Camera zoom
+  above 100%, other uncapped diagrams, small screens, Embed,
+  Present and print restore ordinary in-SVG legend placement; canonical
+  exports remove the corner marker and transform without changing authored
+  coordinates or transforms. The 960px shell floor still serves the header and
+  controls. An explicit viewBox retains
+  its existing fixed-canvas fit. Present still provides the full overview;
+  camera 100% is relative to the fitted reading size, not intrinsic SVG pixels.
+- Initial wide-diagram classification sets `data-wide-diagram` on the diagram
+  container and `data-diagram-shape` on `html`. These survive eligibility changes;
+  CSS and camera/radar behavior still depend on the wide-diagram flag on narrow
+  screens. This is not live reclassification after replacing the diagram.
+- Reader owns its measure/overflow animation-frame handles and the load/resize,
+  font-ready, ResizeObserver and MutationObserver subscriptions. They last for
+  the page lifetime. `schedule` coalesces requests; deferred overflow settling
+  rechecks eligibility. Leaving adaptive layout clears its state without
+  unmounting the module or clearing another module's state.
+- Desktop eligibility and optional-observer behavior are unchanged. Shared
+  `waitForStableLayout` waits for fonts, pending work and
+  consecutive stable dimensions; its default 240-frame sampling limit starts
+  after font readiness. It is not a wall-clock timeout for stalled fonts or
+  background pages. Keep this helper shared with Viewer Chrome Layout.
+
+## Viewer Chrome Layout contract
+
+The IIFE initializes once after the shared waiter and Reader Layout, before
+Camera (`Archify.view`). Its interface remains `measure`, `schedule`, `reprobe`,
+`whenStable`, `stageRect`, `active`, and `receipt`. `measure` may return null while
+probing or arranging follow-up work; `receipt` may measure if no receipt exists.
+
+- `schedule` coalesces a measurement into one animation frame. Camera calls it
+  after applying transforms. It does not request a fresh zero-reserve baseline.
+- `reprobe` temporarily removes the rail, waits for Reader's `whenStable` and
+  schedules measurement again. Concurrent probes reuse the pending Promise.
+  A non-baseline camera or an empty baseline only schedules and resolves false;
+  a completed probe resolves true. Reader rejection is caught as before.
+- Writing a changed reserve calls Reader's `schedule`. Chrome's `whenStable`
+  uses the shared waiter, including font readiness and the pending frame/probe
+  checks. It has the same sampling limits described in the Reader contract.
+
+| Owned state | Meaning and lifetime |
+| --- | --- |
+| Container `--archify-nav-reserve`; container and html `data-nav-stage-rail` | Current visible rail. Clearing removes these inline values/attributes. |
+| Reserve and rail latch | Keep the clearance decision stable while Reader incorporates the extra space. |
+| Baseline gap/intersection and restorable reserve | Preserve the unzoomed layout reference. Temporary ineligibility while zoomed can retain the recovery baseline even though the visible rail is zero. |
+| Probe fallback and pending Promise | If Camera changes during a probe, retain the prior reserve for recovery. They settle through the existing Reader Promise chain. |
+| Measurement frame, follow-up frame, receipt, event/observer subscriptions | Page lifetime. There is no unmount/destroy; leaving eligibility is a layout state change, not module disposal. |
+
+Eligibility requires the container, direct-child SVG, visible navigation, width
+above 720px, no embed mode and no print media. This differs from Reader's 1024px
+threshold. Presentation is eligible when its navigation is visible. A hidden or
+absent legend does not disable protection of the SVG stage. `stageRect` removes
+camera scale/translation from measured geometry; it never rewrites SVG geometry.
+
+Resize, load, print, font readiness and the existing observers retain their
+original roles. ResizeObserver watches navigation/SVG/legend size; a separate
+container-size observation updates dock lift when Camera changes page flow,
+without remeasuring the baseline rail. The stability waiter includes that lift
+frame and its final value.
+MutationObserver watches legend content and the root embed/presentation/preset/
+theme attributes. Camera Reset preserves the established rail; viewport, mode
+and content changes are responsible for baseline reprobes. Optional observer
+fallbacks remain event-driven, without a new polling mechanism.
+
+CSS stays in the shell: reserve affects container and floating-panel spacing,
+while root rail state also changes header/card spacing. Reader reads the
+resulting layout rather than importing Chrome's private state. Keeping this
+contract beside the source localizes navigation-clearance maintenance; the
+Reader/Chrome feedback and Camera/CSS dependencies still exist.
+
+## Camera contract
+
+`viewer-camera.js` initializes `Archify.view` once, after Reader and Chrome
+Layout, before Radar. It captures the diagram container, its first SVG, required
+zoom/reset controls and the initial viewBox. The existing `apply()`,
+`pinControls()` and next-frame semantic sync stay in that order. Focus already
+exists; checks for later modules and deferred callers remain needed.
+The shared `viewerText` helper stays in classic-script scope.
+
+The interface remains `zoomIn`, `zoomOut`, `reset`, `reveal`, `centerAt`,
+`logicalViewport`, `sync`, and `state`. `state()` returns a copy of scale/x/y/mode;
+the modes are overview, manual and semantic. Zoom and Reset return undefined;
+`centerAt` returns a boolean, `logicalViewport` can return null, and `sync`
+delegates to `reveal` or returns false. Manual Reset interrupts callers, whereas
+`reset({ automatic: true })` stops camera motion without the manual takeover path.
+
+Manual zoom uses 25 percentage point steps from 25% through 300%, relative to
+the Reader's fitted size. Below 100%, the diagram centers within the visible
+horizontal scroll viewport; diagrams taller than the viewport stay top-aligned.
+Manual zoom adjusts page scrolling for those long diagrams to preserve the
+visible reading region, or reveal the whole diagram when it fits onscreen.
+Map detail and no camera dragging apply; wide mobile layouts retain
+their contained horizontal scroll. Reset restores 100% overview. Semantic reveal
+and Radar centering retain their existing minimum of 100%. Canonical exports
+retain the original geometry regardless of the manual zoom.
+
+For long ordinary diagrams below 100%, Camera also reduces the container's
+page-flow height to the painted SVG height plus its existing padding/borders.
+The SVG retains its intrinsic client size, so zoom and layout cannot repeatedly
+shrink the camera base. Size observation follows Reader width and Chrome reserve
+changes without requiring a window resize. Reset, short diagrams, Embed, Present
+and print restore the original inline container height and priority. Reaching
+a 100% target restores ordinary flow immediately, so Chrome cannot interpret
+a partly shrunk CSS-animation frame as a new baseline rail. This outer
+layout state is absent from canonical SVG exports.
+
+`reveal` returns a transaction or false, with branch-specific side effects.
+Desktop empty/unknown targets can return before changing the camera. At widths
+up to 720px it first stops motion and applies a semantic scale-1 state; a wide
+diagram can then return false for missing targets. A non-wide mobile diagram
+returns an immediately completed transaction even without targets. Do not turn
+these branches into a uniform Promise or assume false means no state change.
+
+Transactions expose `id`, `state`, `target`, `settled`, `frame`, `timer`,
+`finished`, `resolve` and `cancel(reason, commitTarget)`. `finished` resolves to
+`{ id, state }` through the existing completion path. Replacement, manual
+takeover, Reset and explicit cancellation preserve their distinct reasons;
+repeated cancellation returns false. Committing a target during cancellation
+differs from leaving the current state. Object/settled checks and cancellation
+of frames/timers prevent superseded camera work from advancing; callers retain
+their own stale-result checks. These fields are documented compatibility facts,
+not an invitation for callers to manage the private scheduler.
+
+Desktop transactions use animation frames. Wide mobile diagrams use contained
+scrolling, the existing 460ms completion timer and automatic-scroll guard;
+completion does not certify that native smooth scrolling has ended. The instant,
+reduced-motion and call-time hidden-page branches keep their existing outcomes.
+Camera does not subscribe to every later visibility/media change:
+Motion Governor and other callers retain their own responsibilities.
+
+| State / dependency | Ownership and coordination |
+| --- | --- |
+| Scale/x/y/mode, drag, transaction generation/object, camera frame/timer, clip/resize frames, automatic-scroll guard | Camera owns its page-lifetime state and pointer/scroll/resize/hashchange subscriptions. There is no destroy method. |
+| SVG `transform`, `clip-path`, `data-view-scale` | Camera applies runtime transforms and clipping without rewriting authored geometry, viewBox or semantic IDs. Export cleanup removes these from its clone. |
+| Container detail/camera attributes, `is-pannable`, camera movement/transaction flags, `data-just-panned`, `--archify-scroll-x` | Camera updates controls, drag suppression and mobile control positioning. `is-panning` is also used by Radar surface dragging; it is not exclusively owned by Camera. |
+| Zoom/Reset labels, disabled state, detail attributes, title and ARIA text | Camera renders controls through shared translation helpers; associated CSS stays in the shell. |
+| Reader width/wide-diagram classification; Chrome navigation reserve | Owned by the layout modules. Camera consumes geometry and classification; `apply()` schedules Chrome and synchronizes Radar. |
+| Focus / Route | Finishing transactions repositions Focus. Manual takeover pauses Route Journey, preserving Route elapsed time as before. |
+
+Focus, Finder, Route and Radar reveal semantic targets;
+Radar also consumes `logicalViewport` and calls `centerAt`. Presentation resets
+and schedules semantic sync. Guide and keyboard shortcuts invoke navigation
+commands. Camera samples rendered transforms when manual input takes over,
+rather than treating the intended target as the current painted position.
+
+Transaction completion, rendered transform/clip convergence and Reader/Chrome
+layout stability are different observations. `finished` is not a page-wide
+stability promise. CSS transitions and the clip sampler remain coordinated with
+the existing layout feedback. Extraction localizes camera maintenance without
+removing these runtime dependencies.
+
+## Semantic Radar contract
+
+`semantic-radar.js` initializes `Archify.radar` once after Camera and before
+Presentation. It captures the diagram container and direct-child SVG, initial
+viewBox, map panel/surface/controls, navigation and optional Passport. It creates
+one runtime map SVG outside the canonical diagram and schedules the initial
+node build. Reopening rebuilds node rectangles without appending another map SVG.
+The shared `viewerText` helper and the existing HTML/CSS stay in the shell.
+
+The interface remains `open`, `close`, `toggle`, `sync`, `focus`, `isOpen`, and
+`count`. `isOpen()` reports requested intent, not panel visibility: unavailable
+space can leave intent true while the panel is hidden and aria-expanded is false.
+`open()` returns true even in that state; `close(options)` returns false and
+optionally restores focus to the trigger. `toggle()` switches intent without
+requesting surface focus. `sync()` immediately retries a requested hidden panel;
+otherwise it coalesces work into one animation frame. It is not a stability Promise.
+
+`focus(id)` returns whether the main node was found and actions were issued, not
+whether navigation finished. It preserves Focus selection,
+Camera reveal, delayed page scrolling and main-node focus. `count()` reflects the
+last build; it may be zero before the initial frame or with invalid geometry.
+Failed getBBox calls and non-positive boxes are skipped. Required DOM and input
+assumptions are unchanged.
+
+| State / dependency | Ownership and coordination |
+| --- | --- |
+| Open intent, panel hidden, trigger ARIA/labels/title and space feedback | Radar owns them. A hidden requested panel can recover on retry or reflow. Close clears intent and retries. |
+| Manual position and last placement; dock/side/compact/placement attributes; `--archify-radar-left/right/top` | Radar owns placement. Close clears current docking styles but retains position memory. Reopening or resizing can constrain it to current geometry. |
+| Panel drag and viewport drag | Titlebar input moves the panel; surface input calls Camera. Pointer matching, capture/release and cancellation retain their separate rules. `is-panning` is shared with Camera. |
+| Passport `data-radar-yielded` and saved `aria-hidden` | During compact expansion Radar can yield Passport space. Restoration reinstates the exact original attribute value, or removes it if originally absent. |
+| Map nodes, viewport rectangle, activity markers and status | Derived from main-node bounds, Camera logicalViewport and Focus state. Authored SVG geometry, viewBox and semantic IDs are not rewritten. |
+| Sync frame, space retry and resize/scroll/ResizeObserver subscriptions | Page lifetime; no destroy method. Hidden-panel-only observer notifications are ignored to avoid a retry loop. |
+
+Placement retains normal, compact and unavailable fallbacks. Navigation, Passport
+and legend are hard blockers; active nodes are soft blockers. Manual position
+priority, candidate scoring, clamping, gap and rounding remain private Radar
+implementation. Cancelling titlebar drag restores the previous position intent
+and recomputes placement in the current layout; it need not restore identical
+pixels after geometry changes. Capture-phase Escape cancels titlebar dragging
+before the global close shortcut. Surface pointercancel ends its drag without
+restoring the previous camera state.
+
+Compact expansion may hide Passport temporarily. Failed expansion, returning to
+compact, unavailable space and closing restore it through their existing paths.
+Space retry permits four 60ms attempts per round; success and external reflow
+can reset the count. Close clears that timer and both drag records, hides the
+panel and removes the shared panning class. It does not cancel the already queued
+sync frame (which checks hidden), the untracked delayed node-scroll callback, or
+universally remove every drag attribute. In particular, `data-dragging` is removed
+by the surface drag-end handler, not by the close/reset-docking path.
+
+Camera and Focus notify Radar to sync. Radar consumes Camera logicalViewport and
+calls centerAt/reveal; opening clears Semantic Lens preview and closes that panel
+as before. Route, Semantic Lens, Guide and global keyboard handlers keep their
+existing mutual-exclusion and focus rules. Reader's wide-diagram classification
+and Chrome's navigation reserve affect measured placement without transferring
+ownership. Embed/print and narrow-screen presentation retain their existing CSS
+and caller rules, rather than a new universal Radar eligibility gate. Export
+continues cloning only the canonical diagram, excluding the runtime map SVG.
+
+## Motion Governor contract
+
+`motion-governor.js` initializes `Archify.motionGovernor` once after Export,
+before Source Evidence and Focus. It captures the initial trace capability,
+main SVG, controls and reduced-motion query. Route initializes
+later; its existence checks remain necessary. The final `syncVisibility()`,
+`publishOwner()`, `render()` calls keep their original order. CSS, controls,
+translation helpers and authored animation metadata stay in their existing sources.
+
+The interface is `capable` plus `pause`, `resume`, `toggle`, `setMode`, `mode`,
+`claim`, `release`, `suspend`, `isPaused`, and `owner`. Capability is fixed from
+the initial SVG `data-animation="trace"`. Non-trace pages hide the control, clear
+the existing root motion attributes, and return inert methods: false for pause/
+resume/toggle/release, zero for claim, still for modes, true for isPaused, an
+empty owner, and a suspension function returning false. That branch does not
+install the trace listeners or run its visibility initialization.
+
+For trace pages, pause/resume/toggle return the reader's pause intent, while
+mode/isPaused report effective pause: reader intent OR reduced motion OR a
+nonempty suspension table. Thus resume can return false while mode remains still.
+setMode treats only `still` as a pause request, returns effective mode and honors
+`persist:false`. New readers default to Still. The storage key remains
+`archify-motion`; resume writes `live`, pause removes it, and storage errors are
+ignored. An existing `still` value also stays Still. System suspension
+does not become a persisted user preference. Becoming live resumes continuous
+connection flow when no semantic owner is active; it does not restart Route
+playback or replay an already completed node entrance.
+
+Explicit claims override derived owners. Without a claim, SVG attributes select
+route, lens, relationship, intent, focus, legend,
+then empty, in that order. A semantic owner can coexist with live mode. Claiming
+even the same name clears the previous claim and invokes its cleanup before
+publishing a new token/owner. Cleanup errors are caught; synchronous reentry keeps
+the existing call order without a new guard or queue. Releasing the current token
+does not run cleanup, advances the token and falls back to current SVG state.
+Stale/repeated releases return false. Claims are not a stack of resumable owners.
+
+| State / dependency | Ownership and coordination |
+| --- | --- |
+| Reader pause, suspension table, previous effective-pause value | Governor owns these. Ordinary suspend keys count references; each returned release function succeeds once. Visibility directly sets/deletes the same table's `visibility` key, so a caller using that key does not have independent counting guarantees. |
+| Explicit/derived owner, token and cleanup callback | Governor owns arbitration. Route provides cleanup; their decorations and transaction state remain caller-owned. |
+| Root motion/owner/capable/document-hidden attributes and button hidden/disabled/ARIA/text/title | Governor writes them; CSS consumes them. System preference, suspension, reader pause and owner retain their existing label precedence. Only the system preference disables the button. |
+| Flow overlays, node-entry started flag and pending node set | Governor creates one decorative path per authored connection. CSS repeats its flow while eligible. Node entrance runs at most once and finishes on its animation boundary or suppression. |
+| Button/media/visibility/mutation/animation subscriptions | Page lifetime, no destroy method. Observers watch the explicit SVG owner attributes and root embed/share context. |
+
+Entering effective pause pauses Route Journey
+with elapsed time preserved, using the existing reason priority and call order.
+Route syncMotion retains its render-time notification. The previous-pause guard
+does not imply a universal once-only guarantee under synchronous caller reentry.
+
+Connection flow uses adjacent runtime paths with the authored geometry and
+clipping, without graph identity or relationship attributes. Geometry queries
+exclude these paths. The authored lines, dashes and arrowheads remain visible.
+Pause, semantic ownership, reduced motion, embed/share mode and document hiding
+hide and stop flow; clearing those guards restores it. Print CSS independently
+hides and stops flow, leaving Route Journey's existing print policy in Route.
+Route retains its own beforeprint pause with elapsed time preserved and manual
+resume after printing.
+Folded tree edges
+hide their adjacent flow paths. No per-frame JavaScript or repeated DOM allocation
+is needed. Diagrams without connections retain bounded node entrance only.
+
+Animationend and animationcancel remove node-entry event targets from the pending
+set; unrelated targets are ignored, and an empty set detaches those listeners.
+Suppression finishes node entrance without exhausting connection flow. The
+ambient state describes current eligibility rather than immutable history.
+
+The Governor manages these Viewer signals, not every animation on the page.
+Camera retains its transactions and CSS transitions; Export retains its separate
+WebM canvas timeline. Canonical export cleanup removes flow overlays and preserves
+authored geometry/IDs and line styles.
+
+## Export cleanup contract
+
+`cleanExportClone(clone)` lives inside the Export closure. Its sole caller is
+`serializeSvg`: clone the live SVG, clean it, apply an explicitly requested
+Route/Reach snapshot, then add dimensions, theme/font styles and serialize.
+It mutates only the supplied SVG clone and returns the existing
+`canonicalStateClean` boolean. It neither reads live selection nor calls a
+Viewer capability or changes the live DOM. No new `vc-archify` interface is exposed.
+
+| State owner | Clone treatment |
+| --- | --- |
+| Camera | Remove runtime transform, clipping and view scale. Preserve authored geometry and viewBox. |
+| Motion Governor | Remove decorative connection-flow overlays. Preserve authored lines, dashes, arrowheads and animation metadata. |
+| Focus, relationship preview, reachability, Intent Trace | Remove selection/preview markers and runtime overlays; reset node `aria-pressed` using the existing rule. |
+| Route Probe | Remove picking, result and journey markers/overlays and route step styles. |
+| Semantic Lens and legend preview | Remove filtering/preview decorations and runtime legend accessibility attributes. |
+| Source Evidence | Remove beacons/counts; restore recorded original labels. Missing original labels remove `aria-label`; an authored empty label remains an empty attribute. |
+| Previous Route/Reach share decoration | Remove before applying the current export's explicit snapshot. |
+
+Original content, node/edge identity, geometry and authored animation metadata
+remain. Animation handling for share variants and recordings stays in Export.
+Cleanup preserves the existing operation order, including overlay removal before
+descendant cleanup. Missing optional decorations are harmless; repeated cleanup
+is idempotent. The function assumes an SVG clone supplied by Export, not null or
+the live SVG. Restore records are runtime metadata, not a general undo history.
+
+The boolean checks the existing known transient-state contract; it cannot detect
+arbitrary future decorations. Keep the cleanup and its check together. Adding a
+new runtime decoration still requires checking this contract: extraction isolates
+that knowledge from serialization, but does not eliminate producer/cleanup
+coordination. Do not broaden rules or rejection behavior during a pure extraction.
+
+Route/Reach validation, finite-dimension checks, receipts, errors, menu behavior,
+rasterization, clipboard and recording remain owned by Export. Its existing
+callers use the same paths and return fields. Tests exercise final browser exports;
+isolated clone tests supplement them for restoration and idempotence.
+
+## WebM 录制失败与资源生命周期
+
+`Archify.motion.recordWebm()` 的每次调用独立拥有背景 URL、捕获流、编码器、动画帧和停止定时器。背景加载、画布或流创建、编码器启动、绘制、编码事件以及停止失败时，返回的 Promise 拒绝，资源在同一次终态清理中释放；晚到的事件不会恢复成功状态。正常停止后只有非空 WebM 才能成功返回，`requestData()` 失败仍允许通过 `stop()` 完成最佳努力的最终片段收集。
+
+菜单沿用原有错误提示、失败回执与 WebM 禁用规则；接口调用之间互不清理对方资源。SVG 序列化发生在录制 Promise 之前，其同步异常契约保持不变。修复后的行为仅存在于重新生成的 HTML 中。
+
+回归入口：在仓库根目录设置 `ARCHIFY_CHROME` 后运行 `node --test test/export-browser.test.mjs`。该套件覆盖真实编码、故障边界、晚到事件、同页重试及并行调用；`node test/webm-artifact.smoke.mjs` 另行验证视频解码与实际帧变化。
+
+For required browser, output and package evidence, follow
+[Contributing](../CONTRIBUTING.md#local-setup-and-verification).

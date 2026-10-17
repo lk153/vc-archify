@@ -1,0 +1,9 @@
+{
+  "note": "Artifacts that fail `browser-check` identically when rendered by upstream Archify v3.1.0 (commit in UPSTREAM.json): tall diagrams overflow the 1440x900+ reading viewports. Known upstream behaviour, not a vc-archify regression; tracked here so any NEW failure still fails the gate.",
+  "knownFailures": {
+    "async-job-roundtrip.sequence.html": "viewport overflow (upstream v3.1.0 identical)",
+    "event-stream.dataflow.html": "viewport overflow (upstream v3.1.0 identical)",
+    "incident-response.workflow.html": "viewport overflow (upstream v3.1.0 identical)",
+    "release-delivery.workflow.html": "viewport overflow (upstream v3.1.0 identical)"
+  }
+}

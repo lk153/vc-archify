@@ -1,0 +1,35 @@
+{
+  "name": "vc-archify-monorepo",
+  "private": true,
+  "type": "module",
+  "description": "vc-archify: validated, interactive single-file HTML diagrams from typed JSON (personal fork of Archify).",
+  "license": "MIT",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@vca/web",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "e2e": "pnpm --filter @vca/web e2e",
+    "viewer:build": "node packages/viewer/scripts/generate-viewer.mjs",
+    "viewer:check": "node packages/viewer/scripts/generate-viewer.mjs --check",
+    "vc-archify": "node skills/vc-archify/bin/vc-archify.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:engines": "node scripts/check-engines.mjs",
+    "browser-check": "node scripts/browser-check-gallery.mjs"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.22.0",
+      "onFail": "download"
+    }
+  },
+  "devDependencies": {
+    "turbo": "2.11.8",
+    "vercel": "64.3.1"
+  }
+}

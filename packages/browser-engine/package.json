@@ -1,0 +1,20 @@
+{
+  "name": "@vca/browser-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser build of the vendored vc-archify renderers for the /playground page (Web Worker + in-memory I/O).",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./src/client.d.ts",
+      "default": "./src/client.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,6 @@
+packages:
+  - apps/*
+  - packages/*
+  - skills/*
+allowBuilds:
+  esbuild: true

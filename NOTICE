@@ -1,0 +1,22 @@
+vc-archify
+Copyright (c) 2026 lk153
+
+vc-archify is a personal, non-commercial fork of Archify
+(https://github.com/tt-a1i/archify, MIT, Copyright (c) 2026 tt-a1i), which is
+itself based on Cocoon-AI/architecture-diagram-generator
+(https://github.com/Cocoon-AI/architecture-diagram-generator, Copyright (c) 2025
+Cocoon AI). vc-archify is not affiliated with Archify or archify.si.
+
+Vendored upstream code (commit recorded in UPSTREAM.json):
+  skills/vc-archify/    <- upstream archify/   (renderers, schemas, CLI, skill docs)
+  packages/viewer/src/  <- upstream viewer/    (viewer runtime)
+  gallery/              <- upstream docs/gallery/sources and docs/cases/life
+The upstream MIT licence is kept verbatim in skills/vc-archify/LICENSE.
+
+Third-party material shipped inside every rendered artifact or the skill:
+  - JetBrains Mono (SIL Open Font License 1.1); full licence text in
+    skills/vc-archify/assets/JetBrainsMono-OFL.txt and embedded in artifacts.
+  - Optional third-party brand-mark vectors (Simple Icons and others), with
+    their individual licences and trademark notes in
+    skills/vc-archify/THIRD_PARTY_NOTICES.md. Brand marks identify technologies
+    in user-authored diagrams only and imply no endorsement.

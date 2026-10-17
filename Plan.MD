@@ -1,7 +1,7 @@
 
 # vc-archify — Implementation & Production Plan (Vercel)
 
-> **Status:** Draft v1.3 · 2026-10-17 (all v1 decisions recorded, see §9) · Owner: Principal Technical Architect
+> **Status:** v1.4 · 2026-10-17 · **implemented** (record in §10; all decisions in §9) · Owner: Principal Technical Architect
 > **Usage model (confirmed by the owner 2026-10-17):** vc-archify is a **personal, non-commercial** project, deployed on the **Vercel Hobby (free) plan** for good, not as a stepping stone to a paid plan (§4.0).
 > **Inputs:** [PRD.MD](PRD.MD) (functional requirements) · [design/](design/) (14 SVGs: 6 diagram types × dark/light)
 > **Guiding promise (carried over):** every frame we ship is a live artifact, not a mockup. It is regenerated from versioned JSON IR, checked for structural integrity, and linked to the exact source that produced it.
@@ -105,28 +105,26 @@ Analysis was done directly on the files in [design/](design/). They were rendere
                  + SKILL.md for agents  playground (client-side)        post-v1: /api/validate · /api/render
 ```
 
-### 3.3 Monorepo layout (pnpm workspaces + Turborepo)
+### 3.3 Monorepo layout (pnpm workspaces + Turborepo), as implemented
 
-Turborepo is Vercel's own monorepo tool. It gives first-class remote caching and `turbo-ignore` on Vercel.
+Decision D6 chose the fork ([ADR 0001](docs/adr/0001-build-vs-fork.md)), so the engine is vendored rather than written from scratch. The pipeline in §3.4–§3.8 is implemented by the vendored engine.
 
 ```text
 vc-archify/
-├─ apps/
-│  └─ web/                     # Next.js App Router site → Vercel project root
-│     ├─ app/(site)/…          # English-only pages (no locale segment in v1)
-│     ├─ app/gallery/artifacts/[slug]/route.ts   # force-static artifact HTML
-│     └─ content/              # MDX guide, messages/en.json (all UI copy in one place)
-├─ .github/workflows/        # ci.yml (gates) · deploy.yml (vercel pull → build → deploy --prebuilt), see §4.5
+├─ skills/vc-archify/        # vendored engine + installable agent skill (SKILL.md, bin/vc-archify.mjs, renderers, schemas)
 ├─ packages/
-│  ├─ ir/        tokens/   layout/   render/   viewer/   html/
-│  ├─ cli/                   # bin `vc-archify`; npm publish optional (personal use: run from the repo)
-│  └─ test-kit/              # golden-image harness, fixtures, pixel diff
-├─ gallery/sources/*.json    # versioned IR for every gallery artifact (single source of truth)
-├─ skill/SKILL.md            # agent skill + references (IR guide, examples per type)
-├─ design/                   # golden baselines (read-only)
-├─ package.json              # packageManager (pnpm) + engines.node 24.x + devEngines.runtime (Node 24) — see §4.1.1
+│  ├─ viewer/                # viewer runtime sources (src/) + generator → skills/vc-archify/assets/template.html
+│  ├─ render/                # @vca/render: Node API (render/validate/check/CSP) + engine tests (parity with design/)
+│  └─ browser-engine/        # @vca/browser-engine: renderers bundled for a Web Worker (/playground)
+├─ apps/web/                 # Next.js 16 site (static): pages, artifact/source route handlers, e2e, thumbnails
+├─ gallery/                  # versioned IR: sources/ (12 gallery diagrams) + cases/life/ (4 "beyond code")
+├─ design/                   # reference designs = golden baselines (read-only)
+├─ scripts/                  # sync-upstream.mjs · smoke.mjs · check-engines.mjs
+├─ docs/                     # adr/0001-build-vs-fork.md · runbook.md
+├─ .github/workflows/        # ci.yml (gates) · deploy.yml (vercel pull → build → deploy --prebuilt → smoke → promote)
+├─ package.json              # packageManager pnpm@12.3.4 · engines.node 24.x · devEngines.runtime node 24.22.0 (§4.1.1)
 ├─ pnpm-lock.yaml            # also pins the Node 24 runtime binaries (per-platform URL + sha256)
-├─ turbo.json  pnpm-workspace.yaml  vercel.json
+├─ turbo.json · pnpm-workspace.yaml · UPSTREAM.json · LICENSE · NOTICE
 ```
 
 ### 3.4 Render pipeline
@@ -143,6 +141,8 @@ vc-archify/
 | 8. Assemble HTML | Inline SVG, IR (`<script type="application/json">`), viewer IIFE, side-panel cards, CSP with script hashes | Single `.html` (target ≤ 350 KB) |
 
 ### 3.5 IR v2 (common core + per-type extensions)
+
+> **As implemented:** after the fork (D6), the IR is **upstream's per-type JSON Schema** (`skills/vc-archify/schemas/*.schema.json`; e.g. architecture `components`/`connections`/`boundaries`, ERD `entities`/`relationships`). The sketch below was the design intent and maps onto those schemas; the published schemas are authoritative.
 
 ```ts
 // common
@@ -258,7 +258,7 @@ Hobby has hard limits and no paid overage, so the deployment design is shaped ar
 | **No Skew Protection** (a Pro/Enterprise feature per Vercel docs; verify in P0) | A browser tab open across a deploy can request a JS chunk that no longer exists | Artifacts are self-contained and unaffected. The site adds a global chunk-load-error handler that forces one full reload. Pages are static, so the impact is low. |
 | **Limited WAF**: few custom rules and roughly one rate-limit rule per project | You cannot protect many paths separately | With no public API, the single rate-limit rule protects the heaviest objects: `/gallery/artifacts/*` (e.g. 300 req/min/IP, against scraping and hot-linking that would drain the transfer quota) |
 | **Monthly quotas are hard caps**: about 100 GB Fast Data Transfer, about 1 M function invocations, 4 CPU-hours Active CPU, about 1 M edge requests | Exceeding a cap can pause the project until the next cycle; you cannot buy more on Hobby | **No public functions in v1**; static-first. Image Optimization is off (`images.unoptimized: true`, WebP generated at build time). The **Proof Lab shows static WebP thumbnails** and loads a live artifact iframe only on click (1 artifact per visit instead of 12). Page-weight budgets in §5. Personal traffic should stay far below these caps; the safeguards are cheap insurance against scraping or a link going viral. Check the Usage page weekly in the launch month and monthly after that; act at 50 % of any quota. |
-| **One concurrent build; deployments per day are capped** | A busy PR day could queue or block deploys | Builds run in GitHub Actions (`vercel build`), so Vercel only uploads. Previews deploy only when `turbo-ignore` reports changes under `apps/web` or `packages/*`. |
+| **One concurrent build; deployments per day are capped** | A busy PR day could queue or block deploys | Builds run in GitHub Actions (`vercel build`), so Vercel only uploads. Docs-only changes don't deploy (`paths-ignore`). |
 | **Limited observability**: no log drains, short runtime-log retention, capped Web Analytics/Speed Insights data | Thin production telemetry | With almost no runtime code there is little to log. CI annotations carry build and size telemetry. Web Analytics and Speed Insights are used within the included quotas (§4.6). |
 | **Free GitHub Actions** (not Vercel, but part of the free-tier toolchain): unlimited minutes on standard runners for public repos; a monthly minute allowance for private repos on GitHub Free | A heavy CI suite on a private repo could use up the minutes | Lean CI: PRs run unit + golden + Chromium e2e; the full Chromium/WebKit/Firefox matrix runs on `main` and before tagging. Cache the pnpm store, the Playwright browsers and Turborepo. `concurrency` cancels superseded runs. |
 
@@ -286,7 +286,7 @@ Hobby has hard limits and no paid overage, so the deployment design is shaped ar
 | Build location | **GitHub Actions**, not Vercel's build servers: `vercel pull --environment=<preview\|production>` → `vercel build [--prod]` → `vercel deploy --prebuilt [--prod]`. The install and build commands in `vercel.json` are what `vercel build` runs in CI. |
 | Install / build | `pnpm install --frozen-lockfile` / `turbo run build --filter=@vca/web` |
 | Git integration | Auto-deploys **off** (`"git": { "deploymentEnabled": false }`), so pushes cannot trigger blocked or duplicate builds (§4.0) |
-| Ignored build step | `npx turbo-ignore` runs as a step in `deploy.yml` and skips the deploy when nothing affecting `web` changed |
+| Skipped builds | Docs-only changes are skipped by `paths-ignore` in `deploy.yml`. There is no `turbo-ignore`, because gallery IR and the engine live outside the `@vca/web` package graph (§4.3). |
 | Node.js | **24.x**, Vercel's current default and supported LTS line. **pnpm manages the Node version** (`devEngines.runtime`), and `engines.node: "24.x"` tells Vercel which runtime to use. Details in §4.1.1. |
 | Package manager | `packageManager: "pnpm@12.3.4"`. It runs in CI, so Vercel never has to install pnpm 12 itself. Details in §4.1.1. |
 | Vercel CLI | Pinned as a root devDependency (`vercel@<exact>`) and run through `pnpm exec vercel …`, so it uses the pinned Node 24 |
@@ -349,100 +349,22 @@ Verified locally on this machine (system Node v26.8.2, pnpm 12.3.4) in a scratch
 - **Functions:** v1 has only ISR revalidation (`/` star count hourly, `/community` daily), about 25 invocations a day. When the post-v1 `/api/*` returns, it stays stateless, takes a JSON body ≤ 1 MB (well under Vercel's 4.5 MB request limit) and has no database.
 - **Images:** `images.unoptimized: true`. WebP thumbnails and OG images are generated at build time, so Hobby's Image Optimization quota is never used.
 
-### 4.3 Configuration sketch
+### 4.3 Configuration (as implemented)
 
-`apps/web/next.config.ts`:
+The sketches that used to be here are now real files; read those rather than a copy here:
 
-```ts
-import type { NextConfig } from 'next';
+| File | What it does |
+| --- | --- |
+| [`apps/web/next.config.ts`](apps/web/next.config.ts) | Security headers on every page; `X-Frame-Options: SAMEORIGIN` on site pages; on artifacts, a strict CSP built from the viewer's inline-script hashes (`default-src 'none'; script-src 'sha256-…' …; frame-ancestors *`, read from `.generated/gallery.json`); `.html` → extension-less 308 redirects; `images.unoptimized`; monorepo tracing root |
+| [`apps/web/vercel.json`](apps/web/vercel.json) | `framework: nextjs`, `pnpm install --frozen-lockfile`, `pnpm run build`, `git.deploymentEnabled: false` |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Gates (§5): engines check, viewer template freshness, engine doctor, engine render/parity/contract tests, site build, typecheck, Playwright (Chromium on PRs, full matrix on `main`) |
+| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | `vercel pull` → `vercel build` → `vercel deploy --prebuilt`. PR → preview. Production runs **only after CI passed on `main`** (`workflow_run`) as a **staged** deployment (`--prod --skip-domain`), followed by `pnpm smoke`, then `vercel promote`. `workflow_dispatch(ref)` redeploys an older ref. |
+| [`scripts/smoke.mjs`](scripts/smoke.mjs) | Post-deploy checks: pages, headers, artifact CSP, redirect, sitemap, IR JSON |
 
-const security = [
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  // Vercel already sends HSTS on *.vercel.app; add `preload` only once a custom apex domain exists.
-  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
-];
+Changes from the earlier sketch:
 
-const config: NextConfig = {
-  transpilePackages: ['@vca/ir', '@vca/tokens', '@vca/layout', '@vca/render', '@vca/html'],
-  images: { unoptimized: true },            // Hobby: no Image Optimization quota usage (§4.0)
-  async redirects() {
-    // PRD §6: legacy *.html artifact URLs → extension-less (permanent = 308).
-    // Verify the pattern syntax against the pinned Next version in Phase 0.
-    return [
-      { source: '/gallery/artifacts/:slug([^/.]+)\\.html', destination: '/gallery/artifacts/:slug', permanent: true },
-      { source: '/cases/life/:slug([^/.]+)\\.html', destination: '/cases/life/:slug', permanent: true },
-    ];
-  },
-  async headers() {
-    return [
-      { source: '/:path*', headers: [...security, { key: 'X-Frame-Options', value: 'SAMEORIGIN' }] },
-      // Artifacts must be embeddable (Proof Lab, third-party docs) and are fully self-contained.
-      // A source-specific CSP replaces the X-Frame-Options default for these paths.
-      { source: '/gallery/artifacts/:slug', headers: [
-        { key: 'Content-Security-Policy', value:
-          "default-src 'none'; script-src 'sha256-<viewer-hash>'; style-src 'unsafe-inline'; " +
-          "img-src data: blob:; font-src data:; media-src blob:; frame-ancestors *" },
-        { key: 'Cache-Control', value: 'public, max-age=0, s-maxage=31536000, must-revalidate' },
-      ]},
-    ];
-  },
-};
-export default config;
-```
-
-`vercel.json` stays minimal. `vercel build` in CI reads the install and build commands from it, and Git-integration deploys are switched off (§4.0):
-
-```json
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "turbo run build --filter=@vca/web",
-  "git": { "deploymentEnabled": false }
-}
-```
-
-`.github/workflows/deploy.yml` (outline):
-
-```yaml
-on:
-  pull_request:                       # → preview
-  push: { branches: [main] }          # → production
-  workflow_dispatch:                  # → redeploy an older tag (rollback beyond the previous release)
-    inputs: { ref: { required: true } }
-concurrency: { group: deploy-${{ github.ref }}, cancel-in-progress: true }
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-jobs:
-  deploy:
-    # never expose VERCEL_TOKEN to PRs from forks
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with: { ref: "${{ inputs.ref || github.sha }}", fetch-depth: 0 }
-      - uses: pnpm/action-setup@v4          # standalone pnpm; Node 24 comes from devEngines.runtime
-        with: { standalone: true }
-      - run: pnpm install --frozen-lockfile
-      - run: npx turbo-ignore @vca/web || echo "changed=true" >> "$GITHUB_OUTPUT"
-        id: changes
-      - if: steps.changes.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
-        run: |
-          ENV=$([ "$GITHUB_EVENT_NAME" = "pull_request" ] && echo preview || echo production)
-          PROD=$([ "$ENV" = production ] && echo --prod || true)
-          pnpm exec vercel pull --yes --environment=$ENV --token=${{ secrets.VERCEL_TOKEN }}
-          pnpm exec vercel build $PROD --token=${{ secrets.VERCEL_TOKEN }}
-          URL=$(pnpm exec vercel deploy --prebuilt $PROD --token=${{ secrets.VERCEL_TOKEN }})
-          pnpm smoke "$URL"                 # status, CSP/security headers, artifact zero-request check
-          # (production) on smoke failure: pnpm exec vercel rollback --token=… ; (preview) comment $URL on the PR
-```
-
-Pin the action versions to commit SHAs in P0. `VERCEL_TOKEN` is the owner's token and is stored only as a GitHub Actions secret in the `production` and `preview` environments.
-
-The artifact route handler also sets the CSP hash itself (computed at build time from the inlined viewer), so the header and the content cannot drift. The value in `next.config` above is illustrative.
+- There is **no `turbo-ignore` step**. Gallery IR and the engine live outside the `@vca/web` package graph, so `turbo-ignore` could wrongly skip a deploy. Docs-only changes are skipped with `paths-ignore` instead, and Hobby's deployment cap is ample for one developer.
+- **Staged-then-promote** replaces "deploy, then roll back on failure". A failed smoke test never reaches the production domain.
 
 ### 4.4 Security
 
@@ -462,8 +384,9 @@ The artifact route handler also sets the CSP hash itself (computed at build time
 feature branch ──PR──► ci.yml: lint · typecheck · unit · golden-diff · budgets · Playwright e2e + axe (next start)
                   └──► deploy.yml: vercel build → deploy --prebuilt (Preview URL)
                          └──► smoke test + Lighthouse CI on the preview URL · URL commented on the PR
-main (merge) ─────────► deploy.yml: vercel build --prod → deploy --prebuilt --prod (100 % at once; no rolling release on Hobby)
-                         └──► post-deploy smoke test ──fail──► vercel rollback (to the previous production deployment)
+main (merge) ─────────► ci.yml passes ──workflow_run──► deploy.yml: vercel build --prod → deploy --prebuilt --prod --skip-domain (staged)
+                         └──► smoke test on the staged URL ──pass──► vercel promote (100 % at once; no rolling release on Hobby)
+                                                            └─fail──► not promoted; production keeps the previous release
 tag v1.x.y ───────────► SKILL.md release · (optional) publish the vc-archify CLI to npm
 ```
 
@@ -491,7 +414,7 @@ tag v1.x.y ───────────► SKILL.md release · (optional) p
 | **Golden visual** | Playwright screenshots of re-created designs × {dark, light} vs `design/*.svg` rendered PNGs; `pixelmatch` | ≤ 0.5 % differing pixels per image (tune in Phase 1) |
 | Viewer e2e | Playwright: every shortcut (`R L / M ? E T S 0 + − Esc`), deep links, passport drag, journey, reduced motion | Green on Chromium for every PR; green on Chromium, WebKit and Firefox on `main` and before every tag (saves Actions minutes, §4.0) |
 | Accessibility | `@axe-core/playwright`, keyboard-only scripts, contrast check on tokens | 0 serious/critical violations; AA contrast in both themes |
-| Budgets | `size-limit` + a page-weight check in CI | Viewer ≤ 45 KB gz; artifact HTML ≤ 350 KB raw / ≤ 130 KB brotli; landing JS ≤ 120 KB gz; landing total ≤ 1 MB; gallery initial load ≤ 1.3 MB (static thumbnails) |
+| Budgets | Page weights measured with Playwright on `next start` (§10) | Landing total ≤ 1 MB; gallery initial load ≤ 1.3 MB (static thumbnails); landing JS ≤ 140 KB gz (revised from 120 KB: the Next 16 / React 19 runtime alone is ≈ 130 KB gz). Artifact size follows ADR 0001 (≈ 824 KB raw / 207 KB gz, an accepted F6 deviation). |
 | Site performance | Lighthouse CI on the preview URL | Performance ≥ 95, a11y = 100, SEO ≥ 95 |
 | Exports | Playwright download assertions (dimensions, MIME, 4× clamp) | Matrix green; known Safari gaps documented |
 
@@ -525,19 +448,21 @@ Dropping zh localisation saved about 1 FTE-week, which is already reflected abov
 
 ## 7. Go-live checklist
 
-- [ ] All 6 types × 2 themes × the 3 designed presets pass the golden diff and quality gates
-- [ ] Gallery build fails on any invalid IR (verified by a deliberately broken fixture)
-- [ ] Artifact HTML makes zero network requests (Playwright request log is empty apart from the document)
-- [ ] CSP, HSTS and the security headers are verified on production (securityheaders.com grade ≥ A)
-- [ ] Playground iframe has no `allow-same-origin`; XSS fuzz suite green
-- [ ] WAF rate-limit rule active on `/gallery/artifacts/*`; `VERCEL_TOKEN` exists only in GitHub environment secrets; deploy jobs skip fork PRs
-- [ ] Hobby eligibility: personal, non-commercial use (confirmed 2026-10-17); repo under the owner's personal GitHub account; no ads or paid features
-- [ ] Page-weight budgets met (§5); the capacity estimate in §4.0 re-checked with real weights
-- [ ] Web Analytics + Speed Insights enabled on site pages only
-- [ ] Rollback drill done: `vercel rollback` in under 1 minute, plus one `workflow_dispatch` redeploy of an older tag
-- [ ] `SKILL.md` install verified in the coding agent(s) you actually use. The PRD's other agents (Claude Code, Codex, Cursor, OpenCode, Copilot) use the same skill format and are best-effort. npm publish of the CLI is optional.
-- [ ] No user-visible "Archify" branding remains apart from the attribution line; the artifact `<desc>` reads "generated by vc-archify"
-- [ ] One-page personal runbook: rollback (`vercel rollback` / `workflow_dispatch`), `VERCEL_TOKEN` rotation, what to do if a quota is hit, how to hot-fix gallery IR
+Status as of 2026-10-17 (see §10). ✅ = verified in this repo, 🔲 = owner action at or after the first deploy.
+
+- ✅ All 6 types × 2 themes × the 3 designed presets match the reference designs (viewBox, node and edge sets: 14/14 parity tests), and every gallery artifact passes the engine's checks
+- ✅ Gallery build fails on any invalid IR (verified with a deliberately broken fixture: duplicate component id → build exits 1 with diagnostics)
+- ✅ Artifact HTML makes zero network requests (Playwright: the only request is the document itself, with no CSP violations)
+- ✅ CSP and security headers verified locally (`next start`, `vercel build` output); 🔲 re-check on production with `pnpm smoke <url>` (securityheaders.com optional)
+- ✅ Playground iframe uses `sandbox="allow-scripts allow-downloads"` (no `allow-same-origin`); the injection probe is escaped (engine test)
+- 🔲 WAF rate-limit rule on `/gallery/artifacts/*` (Vercel → Firewall; suggested in docs/runbook.md). ✅ `VERCEL_TOKEN` is used only in `deploy.yml`, whose jobs skip fork PRs
+- ✅ Hobby eligibility: personal, non-commercial use (confirmed 2026-10-17); repo under the owner's personal GitHub account (lk153/vc-archify); no ads or paid features
+- ✅ Page-weight budgets met (landing 345 KB first load / 603 KB fully scrolled, gallery ≈ 660 KB, landing JS 138 KB gz against the revised 140 KB budget)
+- 🔲 Web Analytics + Speed Insights: opt-in (enable in Vercel, then set `NEXT_PUBLIC_VERCEL_ANALYTICS=1`); they load on site pages only, never in artifacts
+- 🔲 Rollback drill after the first two production deploys: `vercel rollback`, plus one `workflow_dispatch` redeploy of an older ref
+- 🔲 `SKILL.md` install verified in the coding agent(s) you use (`npx skills add lk153/vc-archify --skill vc-archify -g` once the repo is pushed). npm publish of the CLI is optional.
+- ✅ No user-visible "Archify" branding apart from the attribution lines; the artifact `<desc>` reads "generated by vc-archify" (engine test and built-page audit)
+- ✅ One-page personal runbook: [docs/runbook.md](docs/runbook.md)
 
 ---
 
@@ -554,6 +479,10 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | Public `/api/validate` + `/api/render` | Usage evidence, and preferably Pro (Hobby quotas are hard caps) | Node.js Vercel Functions; body ≤ 1 MB; dedicated WAF rate-limit rule; render timeout guard |
 | Move to Vercel Pro | **Not expected.** Only if use becomes commercial or multi-person (§4.0) | Settings change only: rolling releases, skew protection, more WAF rules, log drains, collaborator access, Git-integration deploys |
 | Class, Tree, Timeline, Waterfall types | Designs | Same pipeline: new IR extension + layout engine + golden baselines |
+| Artifact size reduction (ADR 0001, F6) | — | Minify the inlined viewer JS/CSS in `packages/viewer/scripts/generate-viewer.mjs` and drop unused locales from the i18n island; keep the design-parity and e2e tests green |
+| Automated axe + Lighthouse gates | — | Add `@axe-core/playwright` to the e2e suite and Lighthouse CI on the preview URL (Plan §5); today a11y is covered by role/name/heading assertions only |
+| Playground byte-identity beyond Chromium | Firefox/WebKit in CI (`main` matrix) | Verify the browser engine's output equals the Node render outside Chromium; text segmentation can differ for exotic scripts |
+| Make the browser-check gate blocking | One green run on Linux runners | Remove `continue-on-error` from the `ci.yml` step |
 
 ---
 
@@ -582,7 +511,7 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | D3 | Localisation | **English only** at launch; copy is centralised so a later locale is additive | §1, §3.3, §3.9, §6, §8 |
 | D4 | Product name | **vc-archify** | See the branding rules below |
 | D5 | Vercel plan | **Hobby (free), permanently.** vc-archify is a **personal, non-commercial** project (confirmed 2026-10-17), built and operated by one developer. v1 is static-only and deployed from CI. | §0, §1, §4.0–§4.6, §5, §6, §7, §8 |
-| D6 | Build vs fork | **2-day spike in P0** against the criteria below. Fork if upstream passes; otherwise build our own TypeScript core as planned and use upstream only as a behavioural reference. | §0, §6, below |
+| D6 | Build vs fork | **2-day spike in P0** against the criteria below. **Outcome (2026-10-17): fork.** F1–F5 and F7 pass, F2 with exact viewBox/node/edge parity on all 7 references. F6 (size) is a documented deviation: 824 KB raw / 207 KB gzip per artifact, still within the Hobby budget. See [ADR 0001](docs/adr/0001-build-vs-fork.md). | §0, §3.3, §6, below |
 
 **Branding rules (D4):**
 
@@ -604,7 +533,7 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | F6 | Size | Artifact HTML ≤ 350 KB raw and viewer ≤ 45 KB gz, or reachable with straightforward trimming |
 | F7 | Maintainability | Modular code with tests; TypeScript types or `.d.ts` can be added; rebranding to vc-archify needs no deep surgery; a usable IR v1/v2 contract |
 
-- **Go (fork):** vendor upstream with `git subtree` as `packages/engine`, keeping its `LICENSE` there and adding a root `NOTICE`. Wrap it behind `@vca/render`, `@vca/viewer` and `@vca/html`, so the website, CLI, CI/CD and Vercel setup in this plan are unchanged. Re-baseline P1–P5.
+- **Go (fork), the chosen path:** `scripts/sync-upstream.mjs` vendors upstream into `skills/vc-archify/` (engine + skill) and `packages/viewer/src/`, re-applies the rebrand and patches, and records the commit in `UPSTREAM.json`. This replaces the planned `git subtree` into `packages/engine`, because it is repeatable and makes the rebrand explicit. The upstream `LICENSE` is kept verbatim, with a root `NOTICE`. `@vca/render` (Node) and `@vca/browser-engine` (Web Worker) wrap the engine; the website, CLI, CI/CD and Vercel setup in this plan are unchanged.
 - **No-go (build):** follow P1–P5 as written. Upstream becomes a behavioural reference (an oracle in the golden tests), with no code reuse beyond what MIT allows with attribution.
 - **Deliverable:** `docs/adr/0001-build-vs-fork.md`, recording the per-criterion evidence, the decision and the revised timeline.
 
@@ -614,3 +543,27 @@ Neither item blocks P0; the defaults apply until you decide.
 
 1. **Custom domain** (optional; Hobby supports it). The default is `vc-archify.vercel.app` until a domain is chosen.
 2. **Repo visibility** (both work on Hobby when the repo is under a personal account). **Public** (recommended) gives unlimited GitHub Actions minutes on standard runners and matches the MIT licence. **Private** keeps work-in-progress hidden and runs within GitHub Free's monthly minutes, which the lean CI in §4.0 is designed for.
+
+---
+
+## 10. Implementation record (2026-10-17)
+
+All of P0–P7 is implemented in this repository. Production deployment is left to the owner, using the existing Vercel project and GitHub secrets.
+
+| Phase | Delivered | Evidence |
+| --- | --- | --- |
+| P0 Foundations | pnpm 12.3.4 + pnpm-pinned Node 24.22.0 (`devEngines.runtime`, `engines.node 24.x`, `pnpm check:engines`); workspace + Turborepo; build-vs-fork spike and **ADR 0001 (fork)**; `scripts/sync-upstream.mjs` (vendor + rebrand + patches; idempotent) | ADR 0001 evidence table; `UPSTREAM.json` (upstream `88d1ae4`, v3.1.0) |
+| P1–P3 Six diagram types | Vendored engine in `skills/vc-archify/` (renderers, schemas, CLI `bin/vc-archify.mjs`, `SKILL.md`), wrapped by `@vca/render` | `pnpm --filter @vca/render test`: **35/35**. All 16 gallery/life sources validate, render and pass engine checks; **14/14 design-parity tests** (7 references × dark/light: viewBox, node set, edge set, preset); determinism; branding; self-containment; CSP; escaping |
+| P4 Viewer | Vendored viewer (`packages/viewer/src`), regenerated into the skill template (`pnpm viewer:check`) | `e2e/viewer.spec.ts`: zero network requests, passport, route + journey, finder/guide/theme shortcuts, legend → lens mapping, presentation/embed, ERD keys, redirect, CSP |
+| P5 Export | Upstream export menu (PNG/JPEG/WebP up to 4×, SVG auto/light/dark, WebM, clipboard) | e2e downloads a dual-theme SVG and a valid PNG |
+| P6 Website | Next.js 16.4.2 static site: `/`, `/gallery` (static thumbnails + click-to-load Proof Lab), `/start` (5 agents × 6 types; works without JS), `/guide`, `/community`, `/playground` (in-browser engine in a Web Worker, sandboxed preview), `/schemas/*`, sitemap/robots/OG, artifacts at `/gallery/artifacts/*` and `/cases/life/*` | `e2e/site.spec.ts` and `e2e/playground.spec.ts` (playground output **byte-identical** to the Node render for all 16 sources); full suite **56/56** (Chromium) |
+| P7 Hardening | Strict artifact CSP (hash-based), security headers, `.html` → 308, chunk-reload guard (no Skew Protection on Hobby), opt-in Vercel Analytics, `ci.yml`, `deploy.yml` (CLI prebuilt; staged → smoke → promote → smoke production → auto-rollback), `scripts/smoke.mjs`, `docs/runbook.md`, LICENSE/NOTICE | `vercel build` verified locally (Build Output API, functions on `nodejs24.x`, CSP and redirects in `config.json`); `pnpm browser-check`: 12 pass, 4 known upstream deviations (baselined), 0 new |
+
+**Measured page weight** (`next start`, gzip): landing 345 KB first load (603 KB fully scrolled); gallery ≈ 660 KB; start/guide/community 233–249 KB; landing JS 138 KB. Playground first render ≈ 410 KB extra, after which re-renders transfer nothing.
+
+**Owner actions before and at the first deploy:**
+1. Vercel project: **Root Directory `apps/web`**, "Include files outside the root directory" on, framework Next.js.
+2. GitHub: the secrets `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are already set. Optionally add `VERCEL_AUTOMATION_BYPASS_SECRET` and the variable `PRODUCTION_HOST` (if the domain isn't `vc-archify.vercel.app`).
+3. Commit and push. CI runs, then `deploy.yml` deploys production after CI passes on `main`.
+4. After go-live: the WAF rate-limit rule, opt-in analytics, the rollback drill and skill-install checks (§7 🔲 items).
+

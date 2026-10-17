@@ -1,0 +1,20 @@
+{
+  "name": "@vca/render",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node API around the vendored vc-archify engine: render, validate and check diagrams.",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.mjs"
+    }
+  },
+  "dependencies": {
+    "vc-archify": "workspace:*"
+  },
+  "scripts": {
+    "test": "node --test 'test/*.test.mjs'"
+  }
+}

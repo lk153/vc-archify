@@ -1,0 +1,132 @@
+# Deploys with the Vercel CLI from GitHub Actions (Plan §4.0/§4.5): the build
+# runs here with the pinned pnpm + Node 24, then the prebuilt output is uploaded.
+# Vercel's Git auto-deploys stay off (apps/web/vercel.json).
+#
+#   pull_request (same repo)  → preview deployment, URL in the job summary + PR comment
+#   CI succeeded on main      → staged production deployment → smoke test → promote →
+#                               smoke test the production domain (auto-rollback on failure)
+#   workflow_dispatch(ref)    → redeploy an older tag/commit to production (rollback beyond
+#                               the single step `vercel rollback` offers on Hobby)
+#
+# Required repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# Optional: VERCEL_AUTOMATION_BYPASS_SECRET (smoke-test protected deployment URLs), TURBO_TOKEN;
+# repository variables PRODUCTION_HOST (default vc-archify.vercel.app) and TURBO_TEAM.
+name: Deploy
+
+on:
+  pull_request:
+    paths-ignore: ['**/*.md', 'design/**', 'docs/**']
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref (tag, branch or SHA) to deploy to production
+        required: true
+
+concurrency:
+  group: deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  # Production domain (repository variable PRODUCTION_HOST, e.g. your custom domain).
+  PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST || 'vc-archify.vercel.app' }}
+
+jobs:
+  deploy:
+    # Never expose VERCEL_TOKEN to pull requests from forks; production only after CI passed.
+    if: >-
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-store-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:engines
+
+      - name: Pull Vercel project settings
+        run: |
+          TARGET=$([ "$GITHUB_EVENT_NAME" = "pull_request" ] && echo preview || echo production)
+          echo "TARGET=$TARGET" >> "$GITHUB_ENV"
+          pnpm exec vercel pull --yes --environment="$TARGET" --token="$VERCEL_TOKEN"
+
+      - name: Build (vercel build)
+        run: |
+          if [ "$TARGET" = "production" ]; then
+            pnpm exec vercel build --prod --token="$VERCEL_TOKEN"
+          else
+            pnpm exec vercel build --token="$VERCEL_TOKEN"
+          fi
+
+      - name: Deploy prebuilt output
+        id: deploy
+        run: |
+          if [ "$TARGET" = "production" ]; then
+            # Staged: production build without moving the domains yet.
+            URL=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")
+          else
+            URL=$(pnpm exec vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Deployment: $URL" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test (deployment URL)
+        # Unique deployment URLs usually sit behind Vercel Deployment Protection.
+        # If the URL is protected and VERCEL_AUTOMATION_BYPASS_SECRET is not set,
+        # this step skips (exit 0); production is smoke-tested again on its domain
+        # after promotion, with an automatic rollback on failure.
+        run: pnpm smoke "${{ steps.deploy.outputs.url }}" --allow-protected
+
+      - name: Promote to production
+        if: env.TARGET == 'production'
+        run: |
+          # Remember what production serves now, for an automatic rollback below.
+          PREV=$(pnpm exec vercel inspect "$PRODUCTION_HOST" --json --token="$VERCEL_TOKEN" 2>/dev/null \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(j.id||j.uid||"")}catch{console.log("")}})' || true)
+          echo "PREV_DEPLOYMENT=$PREV" >> "$GITHUB_ENV"
+          pnpm exec vercel promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
+
+      - name: Smoke test (production domain)
+        if: env.TARGET == 'production'
+        run: |
+          if ! pnpm smoke "https://$PRODUCTION_HOST"; then
+            if [ -n "$PREV_DEPLOYMENT" ]; then
+              echo "Smoke test failed: rolling back to $PREV_DEPLOYMENT"
+              pnpm exec vercel rollback "$PREV_DEPLOYMENT" --yes --token="$VERCEL_TOKEN"
+            fi
+            exit 1
+          fi
+
+      - name: Comment preview URL on the PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --edit-last \
+            --body "Preview: ${{ steps.deploy.outputs.url }}" \
+            || gh pr comment "${{ github.event.pull_request.number }}" --body "Preview: ${{ steps.deploy.outputs.url }}"
