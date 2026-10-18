@@ -8,13 +8,12 @@
     "node": "24.x"
   },
   "scripts": {
-    "gallery": "node scripts/build-gallery.mjs",
+    "examples": "node scripts/build-examples.mjs",
     "engine": "pnpm --filter @vca/browser-engine build",
-    "dev": "pnpm run engine && node scripts/build-gallery.mjs && next dev",
-    "build": "pnpm run engine && node scripts/build-gallery.mjs && next build",
+    "dev": "pnpm run engine && node scripts/build-examples.mjs && next dev",
+    "build": "pnpm run engine && node scripts/build-examples.mjs && next build",
     "start": "next start",
-    "typecheck": "node scripts/build-gallery.mjs && next typegen && tsc --noEmit",
-    "thumbnails": "node scripts/build-thumbnails.mjs",
+    "typecheck": "node scripts/build-examples.mjs && next typegen && tsc --noEmit",
     "e2e": "playwright test"
   },
   "dependencies": {

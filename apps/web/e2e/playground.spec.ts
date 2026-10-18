@@ -4,28 +4,28 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { renderDiagram } from '@vca/render';
 
-// /playground: the in-browser engine (packages/browser-engine) renders IR in a
-// Web Worker. Its output must be byte-identical to the Node API (@vca/render),
-// which produced the site's gallery artifacts in apps/web/.generated/.
+// The playground (the app's only page, /): the in-browser engine
+// (packages/browser-engine) renders IR in a Web Worker. Its output must be
+// byte-identical to the Node API (@vca/render), which rendered the examples
+// into apps/web/.generated/artifacts at build time.
 
 const GENERATED = fileURLToPath(new URL('../.generated/', import.meta.url));
 
 interface Entry {
   slug: string;
-  kind: 'gallery' | 'life';
   type: string;
   title: string;
   source: string;
   nodeCount: number;
 }
 
-const gallery: { entries: Entry[] } = JSON.parse(fs.readFileSync(path.join(GENERATED, 'gallery.json'), 'utf8'));
+const examples: { entries: Entry[] } = JSON.parse(fs.readFileSync(path.join(GENERATED, 'examples.json'), 'utf8'));
 const FEATURED = ['architecture', 'workflow', 'sequence', 'dataflow', 'lifecycle', 'erd'];
 const sourceText = (entry: Entry) => fs.readFileSync(path.join(GENERATED, 'sources', entry.source), 'utf8');
 const artifact = (entry: Entry) => fs.readFileSync(path.join(GENERATED, 'artifacts', `${entry.slug}.html`), 'utf8');
 const firstOfType = (type: string) => {
-  const entry = gallery.entries.find((e) => e.kind === 'gallery' && e.type === type);
-  if (!entry) throw new Error(`no gallery entry of type ${type}`);
+  const entry = examples.entries.find((e) => e.type === type);
+  if (!entry) throw new Error(`no example of type ${type}`);
   return entry;
 };
 
@@ -45,7 +45,7 @@ async function nextRender(page: Page, before: number) {
 async function openPlayground(page: Page, query = '') {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`/playground${query}`);
+  await page.goto(`/${query}`);
   await expect(status(page)).toHaveAttribute('data-state', /^(ok|error)$/, { timeout: 30_000 });
   return errors;
 }
@@ -81,9 +81,9 @@ test.describe('playground', () => {
     }
   });
 
-  test('the example picker loads a gallery IR and renders it', async ({ page }) => {
+  test('the example picker loads an example IR and renders it', async ({ page }) => {
     await openPlayground(page);
-    const entry = gallery.entries.find((e) => e.kind === 'life') ?? firstOfType('erd');
+    const entry = firstOfType('erd');
     const before = await renders(page);
     await page.getByLabel('Example').selectOption(entry.source);
     await nextRender(page, before);
@@ -94,7 +94,7 @@ test.describe('playground', () => {
   });
 
   test('a broken IR shows engine diagnostics with path and fixes', async ({ page }) => {
-    const entry = gallery.entries.find((e) => e.source === 'web-app.architecture.json') ?? firstOfType('architecture');
+    const entry = examples.entries.find((e) => e.source === 'web-app.architecture.json') ?? firstOfType('architecture');
     await openPlayground(page, `?example=${entry.source}`);
     await expect(status(page)).toHaveAttribute('data-state', 'ok');
 
@@ -131,10 +131,10 @@ test.describe('playground', () => {
     await expect(diagnostics.getByText('input/diagram-type')).toBeVisible();
   });
 
-  test('browser output is byte-identical to the site build', async ({ page }) => {
+  test('browser output is byte-identical to the Node render', async ({ page }) => {
     test.setTimeout(240_000);
     await openPlayground(page);
-    for (const entry of gallery.entries) {
+    for (const entry of examples.entries) {
       const before = await renders(page);
       const picker = page.getByLabel('Example');
       if ((await picker.inputValue()) === entry.source) await page.getByTestId('pg-render').click();
@@ -180,7 +180,7 @@ test.describe('playground', () => {
     await expect(preview(page).locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.waitForTimeout(600); // draft save is debounced
-    await page.goto('/playground');
+    await page.goto('/');
     await expect(status(page)).toHaveAttribute('data-state', 'ok', { timeout: 30_000 });
     await expect(editor(page)).toHaveValue(JSON.stringify(ir, null, 2));
     await expect(preview(page).locator('html')).toHaveAttribute('data-theme', 'dark');

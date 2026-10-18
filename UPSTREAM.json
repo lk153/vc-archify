@@ -7,7 +7,6 @@
   "vendored": {
     "archify/": "skills/vc-archify/",
     "viewer/": "packages/viewer/src/",
-    "docs/gallery/sources/": "gallery/sources/",
-    "docs/cases/life/*.json": "gallery/cases/life/"
+    "docs/gallery/sources/": "examples/"
   }
 }

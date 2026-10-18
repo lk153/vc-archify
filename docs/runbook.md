@@ -8,7 +8,7 @@ This is the one-page operating guide for the personal Vercel Hobby deployment (P
 pnpm smoke https://vc-archify.vercel.app
 ```
 
-It checks every page, the artifact CSP, the `.html` → extension-less redirect, the sitemap and the IR JSON.
+It checks the playground page and its security headers, the in-browser engine bundle (`/engine/manifest.json`), an example IR, and the redirects from the former multi-page URLs.
 
 ## Roll back
 
@@ -20,19 +20,19 @@ It checks every page, the artifact CSP, the `.html` → extension-less redirect,
 
 After a rollback, Vercel stops auto-assigning the production domain to new deployments until you promote one again. The next successful `main` deploy calls `vercel promote`, which restores this.
 
-## Fix a broken gallery diagram
+## Fix a broken playground example
 
-1. Reproduce it: `pnpm vc-archify validate <type> gallery/sources/<file>.json --json`. The diagnostics include a JSON pointer and suggested fixes.
-2. Fix the IR, then run `pnpm --filter @vca/web gallery && pnpm --filter @vca/web thumbnails`.
-3. Open a PR. CI renders every artifact and fails on any invalid IR. Merge, and production deploys after CI passes.
+1. Reproduce it: `pnpm vc-archify validate <type> examples/<file>.json --json`. The diagnostics include a JSON pointer and suggested fixes.
+2. Fix the IR, then run `pnpm --filter @vca/web examples`.
+3. Open a PR. CI renders every example and fails on any invalid IR. Merge, and production deploys after CI passes.
 
 ## A Hobby quota is near its limit
 
 Check Vercel → Usage. Hobby caps are hard: if one is exceeded, the project can be paused until the next cycle.
 
 1. Find the traffic source: Vercel → Observability / Web Analytics (look for hot-linked artifact URLs or scrapers).
-2. Tighten the WAF rate-limit rule on `/gallery/artifacts/*` (Vercel → Firewall). The suggested rule is 300 requests/min per IP with a 60 s block.
-3. Reduce page weight: thumbnails are already static, and live artifacts load only on click.
+2. Add or tighten a WAF rate-limit rule on `/engine/*`, the heaviest download (Vercel → Firewall). The suggested rule is 300 requests/min per IP with a 60 s block.
+3. Reduce page weight: the engine loads per diagram type on demand, and re-renders download nothing.
 4. If it is sustained and legitimate, see Plan §4.0 (moving to Pro is a settings change).
 
 ## Rotate the Vercel token

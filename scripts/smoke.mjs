@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Post-deploy smoke test (Plan §4.5): status codes, security headers, the
-// artifact CSP and the .html → extension-less redirect on a live deployment.
+// Post-deploy smoke test (Plan §4.5) for the single-page app: the playground
+// page, its security headers, the in-browser engine bundle, the example IR, and
+// the redirects from the former multi-page site.
 //
 //   pnpm smoke https://vc-archify.vercel.app
-//   VERCEL_AUTOMATION_BYPASS_SECRET=… pnpm smoke <protected-preview-url>
-//   pnpm smoke <url> --allow-protected   # exit 0 when the preview is behind Vercel Authentication
+//   VERCEL_AUTOMATION_BYPASS_SECRET=… pnpm smoke <protected-deployment-url>
+//   pnpm smoke <url> --allow-protected   # exit 0 when the URL is behind Vercel Authentication
 
 const args = process.argv.slice(2);
 const base = args.find((a) => !a.startsWith('--'))?.replace(/\/$/, '');
@@ -20,10 +21,8 @@ if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
 }
 
 const failures = [];
-const fetchPath = async (path, init = {}) => {
-  const res = await fetch(`${base}${path}`, { headers, redirect: 'manual', signal: AbortSignal.timeout(20_000), ...init });
-  return res;
-};
+const fetchPath = (path) => fetch(`${base}${path}`, { headers, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+const header = (res, name) => res.headers.get(name) ?? '';
 
 const probe = await fetchPath('/');
 if (probe.status === 401 || probe.status === 403) {
@@ -46,42 +45,31 @@ const expectOk = async (path, check) => {
     failures.push(`${path}: ${error.message}`);
   }
 };
-
-const header = (res, name) => res.headers.get(name) ?? '';
 const requireHeader = (res, path, name, pattern) => {
   if (!pattern.test(header(res, name))) failures.push(`${path}: header ${name} = ${JSON.stringify(header(res, name))} does not match ${pattern}`);
 };
 
 console.log(`smoke: ${base}`);
-for (const path of ['/', '/gallery', '/start', '/guide', '/playground', '/community']) {
-  await expectOk(path, async (res) => {
-    requireHeader(res, path, 'content-type', /text\/html/);
-    requireHeader(res, path, 'x-content-type-options', /nosniff/);
-    requireHeader(res, path, 'x-frame-options', /SAMEORIGIN/i);
-    requireHeader(res, path, 'referrer-policy', /strict-origin-when-cross-origin/);
-    const html = await res.text();
-    if (!html.includes('vc-archify')) failures.push(`${path}: page does not mention vc-archify`);
-  });
-}
-
-await expectOk('/sitemap.xml', async (res, path) => {
-  const xml = await res.text();
-  if (!xml.includes('/gallery/artifacts/')) failures.push(`${path}: no artifact URLs listed`);
+await expectOk('/', async (res, path) => {
+  requireHeader(res, path, 'content-type', /text\/html/);
+  requireHeader(res, path, 'x-content-type-options', /nosniff/);
+  requireHeader(res, path, 'x-frame-options', /SAMEORIGIN/i);
+  requireHeader(res, path, 'referrer-policy', /strict-origin-when-cross-origin/);
+  const html = await res.text();
+  if (!html.includes('vc-archify')) failures.push(`${path}: page does not mention vc-archify`);
+  if (!html.includes('data-testid="pg-editor"')) failures.push(`${path}: the playground editor is missing`);
 });
 
-await expectOk('/gallery/artifacts/web-app.architecture', async (res, path) => {
-  requireHeader(res, path, 'content-type', /text\/html/);
-  requireHeader(res, path, 'content-security-policy', /^default-src 'none'; script-src 'sha256-/);
-  const html = await res.text();
-  if (!/<svg\b[^>]*role="img"/.test(html)) failures.push(`${path}: no diagram SVG`);
-  if (/archify\.si|github\.com\/tt-a1i/.test(html.replace(/https:\/\/github\.com\/tt-a1i\/archify\/schemas\/[^"]*/g, ''))) {
-    failures.push(`${path}: upstream product links leaked into the artifact`);
+await expectOk('/engine/manifest.json', async (res, path) => {
+  try {
+    const manifest = await res.json();
+    if (!manifest || typeof manifest !== 'object') failures.push(`${path}: empty manifest`);
+  } catch {
+    failures.push(`${path}: not JSON (the in-browser engine was not deployed)`);
   }
 });
 
-await expectOk('/cases/life/monthly-money.dataflow', (res, path) => requireHeader(res, path, 'content-type', /text\/html/));
-
-await expectOk('/gallery/sources/web-app.architecture.json', async (res, path) => {
+await expectOk('/examples/web-app.architecture.json', async (res, path) => {
   try {
     const ir = await res.json();
     if (ir.diagram_type !== 'architecture') failures.push(`${path}: unexpected diagram_type ${ir.diagram_type}`);
@@ -90,15 +78,17 @@ await expectOk('/gallery/sources/web-app.architecture.json', async (res, path) =
   }
 });
 
-try {
-  const res = await fetchPath('/gallery/artifacts/web-app.architecture.html');
-  if (res.status !== 308 || !header(res, 'location').endsWith('/gallery/artifacts/web-app.architecture')) {
-    failures.push(`/gallery/artifacts/web-app.architecture.html: expected 308 to the extension-less URL, got ${res.status} ${header(res, 'location')}`);
-  } else {
-    console.log('  ✓ /gallery/artifacts/web-app.architecture.html → 308');
+for (const path of ['/playground', '/gallery']) {
+  try {
+    const res = await fetchPath(path);
+    if (res.status !== 308 || !/\/$/.test(header(res, 'location'))) {
+      failures.push(`${path}: expected 308 to /, got ${res.status} ${header(res, 'location')}`);
+    } else {
+      console.log(`  ✓ ${path} → 308 /`);
+    }
+  } catch (error) {
+    failures.push(`${path}: ${error.message}`);
   }
-} catch (error) {
-  failures.push(`redirect: ${error.message}`);
 }
 
 if (failures.length) {

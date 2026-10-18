@@ -40,7 +40,7 @@ jobs:
       - name: Engine render, parity and contract tests
         run: pnpm --filter @vca/render test
 
-      - name: Build site (browser engine + gallery + next build)
+      - name: Build app (browser engine + examples + next build)
         run: pnpm --filter @vca/web build
       - name: Typecheck
         run: pnpm --filter @vca/web exec tsc --noEmit

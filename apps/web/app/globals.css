@@ -168,21 +168,7 @@ pre {
   overflow-x: auto;
 }
 
-.skip-link {
-  position: absolute;
-  left: 12px;
-  top: -48px;
-  z-index: 100;
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
-}
 
-.skip-link:focus {
-  top: 12px;
-}
 
 .container {
   width: 100%;
@@ -203,16 +189,6 @@ pre {
   border: 0;
 }
 
-.eyebrow {
-  display: inline-block;
-  margin: 0 0 12px;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 
 .button {
   display: inline-flex;
@@ -245,13 +221,4 @@ pre {
   background: var(--accent-strong);
 }
 
-.card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  backdrop-filter: blur(8px);
-}
 
-.mono {
-  font-family: var(--font-mono);
-}

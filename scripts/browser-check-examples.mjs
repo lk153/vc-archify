@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Run the engine's Chrome-based gate (`vc-archify browser-check`: containment,
-// readability, viewer chrome, theme states) on every artifact the site build
-// produced in apps/web/.generated/artifacts. Needs Google Chrome/Chromium on
+// readability, viewer chrome, theme states) on every example the build rendered
+// into apps/web/.generated/artifacts. Needs Google Chrome/Chromium on
 // PATH, or ARCHIFY_CHROME=/path/to/chrome.
 //
-//   pnpm --filter @vca/web gallery && pnpm browser-check
+//   pnpm --filter @vca/web examples && pnpm browser-check
 
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -20,7 +20,7 @@ const CLI = path.join(ROOT, 'skills', 'vc-archify', 'bin', 'vc-archify.mjs');
 const baseline = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'browser-check-baseline.json'), 'utf8')).knownFailures;
 
 if (!fs.existsSync(ARTIFACTS)) {
-  console.error('No artifacts found. Run `pnpm --filter @vca/web gallery` first.');
+  console.error('No artifacts found. Run `pnpm --filter @vca/web examples` first.');
   process.exit(2);
 }
 

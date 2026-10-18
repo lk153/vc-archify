@@ -30,7 +30,7 @@
 | Output | Self-contained HTML (inline SVG + viewer, zero external requests); dual-theme SVG; PNG/JPEG/WebP up to 4×; WebM motion; clipboard (PRD §3). |
 | Viewer | All of PRD §4.1–§4.13 (layout, toolbar, reading depth, passport, route/journey, lens, find, radar, guide, URL state, a11y, ERD rendering). |
 | Authoring | JSON IR v2 (with v1 → v2 migration), CLI `validate`/`render`, agent skill (`SKILL.md`) for Claude Code, Codex, Cursor, OpenCode, Copilot. |
-| Website | Landing, Start wizard, Gallery, Guide, Community, Playground. **English only.** |
+| Website | **One page: the playground** (D8, 2026-10-18). Example picker, IR JSON editor, diagnostics, live preview (dark/light), Download HTML/JSON. **English only.** |
 | Branding | Public product name **vc-archify** on the site, the CLI, the skill and generated artifacts, with upstream attribution (§9). |
 | Platform | Production on **Vercel Hobby** with preview-per-PR (deployed from CI), CDN static delivery, security headers, analytics, rollback. |
 | Browsers | **Chromium-based only** (D7). |
@@ -222,21 +222,16 @@ Storage: viewer preferences use `localStorage` only inside `try/catch`, because 
 
 ### 3.9 Website routes (`apps/web`)
 
-| Route (English only) | Content | Rendering on Vercel |
-| --- | --- | --- |
-| `/` | Landing: types, output, design system, "beyond code" cases, quickstart | SSG |
-| `/start?agent=&type=` | Install wizard per agent (Claude Code, Codex, Cursor, OpenCode, Copilot) + starter prompt per type | SSG shell; params are read on the client |
-| `/gallery` | Artifact grid + Proof Lab (lazy `loading="lazy"` iframes, `?embed=1&theme=`) | SSG |
-| `/gallery/artifacts/[slug]` | **The artifact itself** (self-contained HTML) | Route handler, `dynamic='force-static'`, `generateStaticParams` from `gallery/sources` |
-| `/gallery/sources/[slug].json` | The IR that produced the artifact ("linked to the exact source") | force-static route handler |
-| `/cases/life/[slug]` | Non-code examples (leave plan, renting, budget, job search) | force-static |
-| `/guide` | IR reference, skill usage, presets, profiles (MDX) | SSG |
-| `/community` | Packages and compatibility (IR v1/v2) | SSG + ISR (`revalidate: 86400`) |
-| `/playground` | JSON editor (Monaco + IR schema) → live preview in a `srcdoc` sandbox iframe → download HTML/exports | Static shell; rendering is 100 % client-side |
-| `/schema/ir-v2.json` | Published JSON Schema | Static |
-| `sitemap.xml`, `robots.txt`, OG images | Next metadata routes, `next/og` | Generated at build time |
+> **Changed by D8 (2026-10-18):** the app is a single page. The landing, gallery, start, guide and community pages, the served artifacts, thumbnails, sitemap/OG and the GitHub star count (the only ISR) were removed. The earlier table is kept in git history.
 
-The GitHub star count is fetched server-side with ISR (`revalidate: 3600`) using a `GITHUB_TOKEN`. This avoids the client-side GitHub REST calls seen in PRD §6 and their rate limits. It costs at most ~24 function invocations a day, a negligible share of the Hobby quota.
+| Route | Content | Rendering on Vercel |
+| --- | --- | --- |
+| `/` | **The playground:** example picker (12 technical diagrams grouped by type), IR JSON editor, engine diagnostics with JSON-pointer "Go to", live preview in a `srcdoc` sandbox iframe (Match site / Dark / Light), Download HTML / Download JSON | Static; rendering is 100 % client-side in a Web Worker |
+| `/examples/[file].json` | The IR the page loads when an example is picked (from repo-root `examples/`) | force-static route handler |
+| `/engine/*` | The in-browser engine bundle (`packages/browser-engine` build output) | Static files |
+| `/playground`, `/gallery/*`, `/start`, `/guide`, `/community`, `/cases/*` | 308 redirect to `/` | Redirect |
+
+The whole site is static: there are **no** functions and no ISR, so there are zero function invocations on Hobby.
 
 Public `/api/validate` and `/api/render` are **not part of v1** (§1, §8).
 
@@ -437,7 +432,7 @@ tag v1.x.y ───────────► SKILL.md release · (optional) p
 | **P3 Sequence, Lifecycle, ERD** | 3 | Lifelines/activations/segments; `main-path-v3`, terminal and initial markers; domain bands, column ports, crow's-foot | `cache-miss-request-sequence`, `deployment-release-lifecycle` and `order-management-schema` pass the golden diff; shipped to production |
 | **P4b Viewer complete** | 2.5 | Route + journey, lens, radar, guide, panel, presentation/embed modes | e2e + axe gates green on all six types; viewer budget met |
 | **P5 Export** | 1.5 | SVG, PNG/JPEG/WebP (4× with clamp), WebM, clipboard | Export tests green on Chromium |
-| **P6 Website** | 2.5 | Landing, Start wizard, Gallery + Proof Lab (static thumbnails), Guide (MDX), Community, Playground (English only), vc-archify branding and attribution, SEO (sitemap, OG) | Every sitemap route renders; Lighthouse gates; English copy reviewed |
+| **P6 Website** | 2.5 | Single-page playground (D8): examples, editor, diagnostics, preview, downloads; vc-archify branding and attribution | The page and its example routes render; e2e green |
 | **P7 Hardening & v1** | 1 | CSP hashes, WAF rate-limit rule, page-weight and quota review against §4.0, one-page runbook, rollback drill, `SKILL.md` for the agents you use, optional npm publish | Go-live checklist (§7) signed off |
 | **Post-v1** | — | Backlog in §8 | Each item is decided separately |
 
@@ -456,9 +451,9 @@ Status as of 2026-10-17 (see §10). ✅ = verified in this repo, 🔲 = owner ac
 - ✅ Artifact HTML makes zero network requests (Playwright: the only request is the document itself, with no CSP violations)
 - ✅ CSP and security headers verified locally (`next start`, `vercel build` output); 🔲 re-check on production with `pnpm smoke <url>` (securityheaders.com optional)
 - ✅ Playground iframe uses `sandbox="allow-scripts allow-downloads"` (no `allow-same-origin`); the injection probe is escaped (engine test)
-- 🔲 WAF rate-limit rule on `/gallery/artifacts/*` (Vercel → Firewall; suggested in docs/runbook.md). ✅ `VERCEL_TOKEN` is used only in `deploy.yml`, whose jobs skip fork PRs
+- 🔲 WAF rate-limit rule on `/engine/*`, the heaviest download (Vercel → Firewall; suggested in docs/runbook.md). ✅ `VERCEL_TOKEN` is used only in `deploy.yml`, whose jobs skip fork PRs
 - ✅ Hobby eligibility: personal, non-commercial use (confirmed 2026-10-17); repo under the owner's personal GitHub account (lk153/vc-archify); no ads or paid features
-- ✅ Page-weight budgets met (landing 345 KB first load / 603 KB fully scrolled, gallery ≈ 660 KB, landing JS 138 KB gz against the revised 140 KB budget)
+- ✅ Page weight: the single page loads its app shell, then the engine on demand (≈ 410 KB for the first render, 15–40 KB per additional type, 0 for re-renders)
 - 🔲 Web Analytics + Speed Insights: opt-in (enable in Vercel, then set `NEXT_PUBLIC_VERCEL_ANALYTICS=1`); they load on site pages only, never in artifacts
 - 🔲 Rollback drill after the first two production deploys: `vercel rollback`, plus one `workflow_dispatch` redeploy of an older ref
 - 🔲 `SKILL.md` install verified in the coding agent(s) you use (`npx skills add lk153/vc-archify --skill vc-archify -g` once the repo is pushed). npm publish of the CLI is optional.
@@ -512,6 +507,7 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | D5 | Vercel plan | **Hobby (free), permanently.** vc-archify is a **personal, non-commercial** project (confirmed 2026-10-17), built and operated by one developer. v1 is static-only and deployed from CI. | §0, §1, §4.0–§4.6, §5, §6, §7, §8 |
 | D6 | Build vs fork | **2-day spike in P0** against the criteria below. **Outcome (2026-10-17): fork.** F1–F5 and F7 pass, F2 with exact viewBox/node/edge parity on all 7 references. F6 (size) is a documented deviation: 824 KB raw / 207 KB gzip per artifact, still within the Hobby budget. See [ADR 0001](docs/adr/0001-build-vs-fork.md). | §0, §3.3, §6, below |
 | D7 | Supported browsers | **Chromium-based only** (Chrome, Edge, Brave, Opera, Arc), decided 2026-10-18. The e2e suite and CI test Chromium only; the site's `browserslist` targets Chromium; cross-browser workarounds were removed. | §1, §5, README, Guide |
+| D8 | Web app scope | **One page: the playground** (decided 2026-10-18 after reviewing the staging deploy). The app is for technical architecture diagrams, so the landing, gallery, start, guide and community pages, the 4 everyday "beyond code" examples, served artifacts, thumbnails, sitemap/OG and the star count were removed. Old URLs 308 to `/`. | §1, §3.9, §6, §7, §10 |
 
 **Branding rules (D4):**
 
@@ -553,11 +549,11 @@ All of P0–P7 is implemented in this repository. Production deployment is left 
 | Phase | Delivered | Evidence |
 | --- | --- | --- |
 | P0 Foundations | pnpm 12.3.4 + pnpm-pinned Node 24.22.0 (`devEngines.runtime`, `engines.node 24.x`, `pnpm check:engines`); workspace + Turborepo; build-vs-fork spike and **ADR 0001 (fork)**; `scripts/sync-upstream.mjs` (vendor + rebrand + patches; idempotent) | ADR 0001 evidence table; `UPSTREAM.json` (upstream `88d1ae4`, v3.1.0) |
-| P1–P3 Six diagram types | Vendored engine in `skills/vc-archify/` (renderers, schemas, CLI `bin/vc-archify.mjs`, `SKILL.md`), wrapped by `@vca/render` | `pnpm --filter @vca/render test`: **35/35**. All 16 gallery/life sources validate, render and pass engine checks; **14/14 design-parity tests** (7 references × dark/light: viewBox, node set, edge set, preset); determinism; branding; self-containment; CSP; escaping |
+| P1–P3 Six diagram types | Vendored engine in `skills/vc-archify/` (renderers, schemas, CLI `bin/vc-archify.mjs`, `SKILL.md`), wrapped by `@vca/render` | `pnpm --filter @vca/render test`: **31/31**. All 12 examples validate, render and pass engine checks; **14/14 design-parity tests** (7 references × dark/light: viewBox, node set, edge set, preset); determinism; branding; self-containment; CSP; escaping |
 | P4 Viewer | Vendored viewer (`packages/viewer/src`), regenerated into the skill template (`pnpm viewer:check`) | `e2e/viewer.spec.ts`: zero network requests, passport, route + journey, finder/guide/theme shortcuts, legend → lens mapping, presentation/embed, ERD keys, redirect, CSP |
 | P5 Export | Upstream export menu (PNG/JPEG/WebP up to 4×, SVG auto/light/dark, WebM, clipboard) | e2e downloads a dual-theme SVG and a valid PNG |
-| P6 Website | Next.js 16.4.2 static site: `/`, `/gallery` (static thumbnails + click-to-load Proof Lab), `/start` (5 agents × 6 types; works without JS), `/guide`, `/community`, `/playground` (in-browser engine in a Web Worker, sandboxed preview), `/schemas/*`, sitemap/robots/OG, artifacts at `/gallery/artifacts/*` and `/cases/life/*` | `e2e/site.spec.ts` and `e2e/playground.spec.ts` (playground output **byte-identical** to the Node render for all 16 sources); full suite **56/56** (Chromium) |
-| P7 Hardening | Strict artifact CSP (hash-based), security headers, `.html` → 308, chunk-reload guard (no Skew Protection on Hobby), opt-in Vercel Analytics, `ci.yml`, `deploy.yml` (CLI prebuilt; staged → smoke → promote → smoke production → auto-rollback), `scripts/smoke.mjs`, `docs/runbook.md`, LICENSE/NOTICE | `vercel build` verified locally (Build Output API, functions on `nodejs24.x`, CSP and redirects in `config.json`); `pnpm browser-check`: 12 pass, 4 known upstream deviations (baselined), 0 new |
+| P6 Website | **Single page (D8):** Next.js 16.4.2, fully static. `/` is the playground (in-browser engine in a Web Worker, sandboxed preview); `/examples/*.json`; old multi-page URLs 308 to `/` | `e2e/app.spec.ts`, `e2e/playground.spec.ts` (output **byte-identical** to the Node render for all 12 examples), `e2e/viewer.spec.ts` (downloaded HTML: shortcuts, deep links, export, modes); **20/20** (Chromium) |
+| P7 Hardening | Security headers, redirects from the former multi-page URLs, chunk-reload guard (no Skew Protection on Hobby), opt-in Vercel Analytics, `ci.yml`, `deploy.yml` (CLI prebuilt; staged → smoke → promote → smoke production → auto-rollback), `scripts/smoke.mjs`, `docs/runbook.md`, LICENSE/NOTICE | `vercel build` verified locally (Build Output API, functions on `nodejs24.x`, CSP and redirects in `config.json`); `pnpm browser-check`: 8 pass, 4 known upstream deviations (baselined), 0 new |
 
 **Measured page weight** (`next start`, gzip): landing 345 KB first load (603 KB fully scrolled); gallery ≈ 660 KB; start/guide/community 233–249 KB; landing JS 138 KB. Playground first render ≈ 410 KB extra, after which re-renders transfer nothing.
 

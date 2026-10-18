@@ -6,6 +6,8 @@ vc-archify is an agent skill (Claude Code, Codex, Cursor, OpenCode, GitHub Copil
 
 Featured diagram types: **architecture · workflow · sequence · dataflow · lifecycle · erd**. The engine also renders class, tree, timeline and waterfall diagrams.
 
+**The web app is one page: a playground.** Pick an example or paste IR JSON, see engine diagnostics, preview the interactive diagram (dark/light), and download the HTML or JSON. Rendering runs in your browser; nothing is uploaded.
+
 > vc-archify is a personal, non-commercial fork of [Archify](https://github.com/tt-a1i/archify) (MIT), itself based on [Cocoon-AI/architecture-diagram-generator](https://github.com/Cocoon-AI/architecture-diagram-generator). It is not affiliated with archify.si. See [NOTICE](NOTICE) and [docs/adr/0001-build-vs-fork.md](docs/adr/0001-build-vs-fork.md).
 
 ## Use the skill
@@ -24,7 +26,7 @@ node skills/vc-archify/bin/vc-archify.mjs check    diagram.html --json
 
 The output is one HTML file. Open it in a Chromium-based browser or attach it to an email or PR. It makes **no network requests**.
 
-**Supported browsers:** Chromium-based only (Chrome, Edge, Brave, Opera, Arc). The site, playground and artifacts are built and tested for Chromium; other browsers are not supported.
+**Supported browsers:** Chromium-based only (Chrome, Edge, Brave, Opera, Arc). The playground and the diagrams are built and tested for Chromium; other browsers are not supported.
 
 ## Repository layout
 
@@ -33,11 +35,11 @@ The output is one HTML file. Open it in a Chromium-based browser or attach it to
 | [`skills/vc-archify/`](skills/vc-archify/) | Vendored engine **and** installable skill: renderers, JSON schemas, CLI (`bin/vc-archify.mjs`), `SKILL.md`, references, examples |
 | [`packages/viewer/`](packages/viewer/) | Viewer runtime sources and the generator for `skills/vc-archify/assets/template.html` |
 | [`packages/render/`](packages/render/) | `@vca/render`, a Node API (`renderDiagram`, `validateDiagram`, `checkArtifact`, `artifactCsp`) plus the engine tests |
-| [`packages/browser-engine/`](packages/browser-engine/) | Browser bundle of the renderers (Web Worker) used by `/playground` |
-| [`apps/web/`](apps/web/) | The website (Next.js 16, fully static): landing, gallery, start, guide, playground, community |
-| [`gallery/`](gallery/) | Versioned IR for every gallery and "beyond code" artifact; rendered and checked at build time |
+| [`packages/browser-engine/`](packages/browser-engine/) | Browser bundle of the renderers (Web Worker) used by the playground |
+| [`apps/web/`](apps/web/) | The web app (Next.js 16, fully static): one page, the playground at `/`, plus `/examples/*.json` |
+| [`examples/`](examples/) | IR for the playground's example picker (12 technical diagrams); every one is rendered and checked at build time |
 | [`design/`](design/) | Reference designs (6 types × dark/light) and the golden baselines for the parity tests |
-| [`scripts/`](scripts/) | `sync-upstream.mjs` (re-vendor + rebrand), `smoke.mjs` (post-deploy checks), `check-engines.mjs` |
+| [`scripts/`](scripts/) | `sync-upstream.mjs` (re-vendor + rebrand), `smoke.mjs` (post-deploy checks), `browser-check-examples.mjs`, `check-engines.mjs` |
 | [`Plan.MD`](Plan.MD), [`PRD.MD`](PRD.MD), [`docs/adr/`](docs/adr/) | Plan, requirements and decisions |
 
 ## Develop
@@ -46,22 +48,22 @@ The toolchain is **pnpm 12.3.4**, and pnpm also manages Node: the repo pins **No
 
 ```bash
 pnpm install                    # also downloads the pinned Node 24 runtime
-pnpm dev                        # browser engine + gallery + next dev  (http://localhost:3000)
-pnpm --filter @vca/render test  # engine: every gallery IR renders + passes checks, design parity, CSP, escaping
-pnpm --filter @vca/web build    # production build (renders all artifacts, fails on any invalid IR)
+pnpm dev                        # browser engine + examples + next dev  (http://localhost:3000)
+pnpm --filter @vca/render test  # engine: every example renders + passes checks, design parity, escaping
+pnpm --filter @vca/web build    # production build (fails if any example IR is invalid)
 pnpm --filter @vca/web e2e      # Playwright (Chromium only) against `next start`: local Google Chrome, bundled Chromium in CI
-pnpm --filter @vca/web thumbnails  # regenerate gallery thumbnails after changing gallery IR
+pnpm browser-check              # engine's Chrome-based gate on every rendered example
 pnpm viewer:build               # regenerate the viewer template after editing packages/viewer/src
 pnpm check:engines              # Node pins agree (devEngines.runtime ↔ engines.node)
 ```
 
 Run scripts through `pnpm` (or `node_modules/.bin/node`) so they use the pinned Node 24.
 
-### Add or change a gallery diagram
+### Add or change a playground example
 
-1. Add or edit `gallery/sources/<name>.<type>.json` (or `gallery/cases/life/`).
-2. Check it: `pnpm vc-archify validate <type> gallery/sources/<name>.<type>.json --json`.
-3. `pnpm --filter @vca/web gallery && pnpm --filter @vca/web thumbnails`, then commit the IR and the thumbnails.
+1. Add or edit `examples/<name>.<type>.json`.
+2. Check it: `pnpm vc-archify validate <type> examples/<name>.<type>.json --json`.
+3. `pnpm --filter @vca/web examples` (renders and checks all examples), then commit the IR.
 
 ### Sync with upstream Archify
 
@@ -81,7 +83,7 @@ One-time setup:
 
 1. **Vercel project settings:** Framework **Next.js**, **Root Directory `apps/web`**, and "Include files outside the root directory" **on**. Node.js version: 24.x is read from `engines.node`.
 2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` if your production domain isn't `vc-archify.vercel.app`.
-3. **Vercel environment variables (optional):** `GITHUB_TOKEN` (raises the GitHub API limit for the star count), and `NEXT_PUBLIC_SITE_URL` if you use a custom domain (the default is `https://vc-archify.vercel.app`).
+3. **Vercel environment variables (optional):** `NEXT_PUBLIC_SITE_URL` if you use a custom domain (the default is `https://vc-archify.vercel.app`), and `NEXT_PUBLIC_VERCEL_ANALYTICS=1` after enabling Web Analytics.
 
 Flow ([`.github/workflows/`](.github/workflows/)):
 

@@ -19,7 +19,7 @@
     "vc-archify": "node skills/vc-archify/bin/vc-archify.mjs",
     "smoke": "node scripts/smoke.mjs",
     "check:engines": "node scripts/check-engines.mjs",
-    "browser-check": "node scripts/browser-check-gallery.mjs"
+    "browser-check": "node scripts/browser-check-examples.mjs"
   },
   "devEngines": {
     "runtime": {

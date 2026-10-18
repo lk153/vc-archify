@@ -2,13 +2,12 @@
 // Vendor the upstream Archify engine (MIT) into this repository and apply the
 // vc-archify rebrand. Re-run it against a newer upstream checkout to sync:
 //
-//   node scripts/sync-upstream.mjs <path-to-upstream-archify-checkout> [--gallery]
+//   node scripts/sync-upstream.mjs <path-to-upstream-archify-checkout> [--examples]
 //
 // What it does (see docs/adr/0001-build-vs-fork.md and UPSTREAM.md):
 //   archify/                 -> skills/vc-archify/        (renderers, schemas, CLI, skill docs)
 //   viewer/                  -> packages/viewer/src/      (viewer runtime sources)
-//   docs/gallery/sources/    -> gallery/sources/          (gallery IR)
-//   docs/cases/life/*.json   -> gallery/cases/life/       ("beyond code" IR)
+//   docs/gallery/sources/    -> examples/                 (playground examples; only with --examples)
 // then rewrites user-visible "Archify" branding to "vc-archify". Internal
 // identifiers (the `Archify.*` viewer namespace, CSS classes, data-* contract,
 // diagnostic codes, ARCHIFY_* environment variables) are kept unchanged so the
@@ -25,7 +24,7 @@ const OUR_SITE_URL = 'https://vc-archify.vercel.app';
 
 const upstream = path.resolve(process.argv[2] || '');
 if (!process.argv[2] || !fs.existsSync(path.join(upstream, 'archify', 'SKILL.md'))) {
-  console.error('Usage: node scripts/sync-upstream.mjs <path-to-upstream-archify-checkout> [--gallery]');
+  console.error('Usage: node scripts/sync-upstream.mjs <path-to-upstream-archify-checkout> [--examples]');
   process.exit(2);
 }
 
@@ -97,22 +96,20 @@ copyTree(path.join(upstream, 'archify'), skillDir, {
 const viewerDir = path.join(ROOT, 'packages', 'viewer', 'src');
 copyTree(path.join(upstream, 'viewer'), viewerDir);
 
-// --- 3. gallery + life cases --------------------------------------------------
-// The gallery is vc-archify's own curated content after the first import (the
-// life cases were translated and migrated locally), so it is only re-imported
-// on request: `--gallery` copies upstream's gallery IR over gallery/.
-const withGallery = process.argv.includes('--gallery') || !fs.existsSync(path.join(ROOT, 'gallery', 'sources'));
-if (withGallery) {
-  const gallerySrc = path.join(ROOT, 'gallery', 'sources');
-  copyTree(path.join(upstream, 'docs', 'gallery', 'sources'), gallerySrc);
-  fs.copyFileSync(path.join(upstream, 'docs', 'gallery', 'manifest.json'), path.join(ROOT, 'gallery', 'upstream-manifest.json'));
-  const lifeDst = path.join(ROOT, 'gallery', 'cases', 'life');
-  copyTree(path.join(upstream, 'docs', 'cases', 'life'), lifeDst, { exclude: (rel) => !rel.endsWith('.json') });
+// --- 3. playground examples -----------------------------------------------------
+// The examples are vc-archify's own curated content after the first import, so
+// they are only re-imported on request: `--examples` copies upstream's gallery
+// IR (technical diagrams) over examples/.
+const examplesDir = path.join(ROOT, 'examples');
+const withExamples = process.argv.includes('--examples') || !fs.existsSync(examplesDir);
+if (withExamples) {
+  copyTree(path.join(upstream, 'docs', 'gallery', 'sources'), examplesDir);
+  fs.copyFileSync(path.join(upstream, 'docs', 'gallery', 'manifest.json'), path.join(examplesDir, 'upstream-manifest.json'));
 }
 
 // --- 4. rebrand ---------------------------------------------------------------
 let changed = 0;
-for (const file of [...listFiles(skillDir), ...listFiles(viewerDir), ...(withGallery ? listFiles(path.join(ROOT, 'gallery')) : [])]) {
+for (const file of [...listFiles(skillDir), ...listFiles(viewerDir), ...(withExamples ? listFiles(examplesDir) : [])]) {
   if (!TEXT_EXT.has(path.extname(file))) continue;
   // The licence files must keep the upstream copyright notice verbatim.
   if (/(^|[\\/])(LICENSE|THIRD_PARTY_NOTICES\.md|JetBrainsMono-OFL\.txt)$/.test(file)) continue;
@@ -224,8 +221,7 @@ fs.writeFileSync(path.join(ROOT, 'UPSTREAM.json'), `${JSON.stringify({
   vendored: {
     'archify/': 'skills/vc-archify/',
     'viewer/': 'packages/viewer/src/',
-    'docs/gallery/sources/': 'gallery/sources/',
-    'docs/cases/life/*.json': 'gallery/cases/life/',
+    'docs/gallery/sources/': 'examples/',
   },
 }, null, 2)}\n`);
 

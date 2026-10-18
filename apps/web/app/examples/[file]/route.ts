@@ -1,16 +1,16 @@
-import { gallery, sourceText } from '@/lib/gallery';
+import { exampleEntries, exampleSource } from '@/lib/examples';
 
-// The exact IR that produced each artifact ("linked to the exact source").
+// The IR of each playground example, fetched by the page when an example is picked.
 export const dynamic = 'force-static';
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return gallery().entries.map((e) => ({ file: e.source }));
+  return exampleEntries().map((e) => ({ file: e.source }));
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ file: string }> }) {
   const { file } = await params;
-  return new Response(sourceText(file), {
+  return new Response(exampleSource(file), {
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
   });
 }

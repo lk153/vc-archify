@@ -11,7 +11,6 @@ export interface PlaygroundExample {
   title: string;
   type: DiagramType;
   typeLabel: string;
-  kind: 'gallery' | 'life';
 }
 
 interface Props {
@@ -129,8 +128,12 @@ export function Playground({ examples, defaultSource }: Props) {
   const requestedRef = useRef<string | null>(null);
 
   const exampleBySource = useMemo(() => new Map(examples.map((e) => [e.source, e])), [examples]);
-  const galleryExamples = examples.filter((e) => e.kind === 'gallery');
-  const lifeExamples = examples.filter((e) => e.kind === 'life');
+  // Group the picker by diagram type, in the order the examples arrive.
+  const exampleGroups = useMemo(() => {
+    const groups = new Map<string, PlaygroundExample[]>();
+    for (const e of examples) groups.set(e.typeLabel, [...(groups.get(e.typeLabel) ?? []), e]);
+    return [...groups.entries()];
+  }, [examples]);
 
   const render = useCallback(async (value: string) => {
     requestedRef.current = value;
@@ -168,7 +171,7 @@ export function Playground({ examples, defaultSource }: Props) {
     setStatus({ state: 'loading', message: `Loading example “${example.title}”…` });
     preloadEngine({ type: example.type }).catch(() => {});
     try {
-      const response = await fetch(`/gallery/sources/${encodeURIComponent(next)}`);
+      const response = await fetch(`/examples/${encodeURIComponent(next)}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const value = await response.text();
       setText(value);
@@ -327,22 +330,15 @@ export function Playground({ examples, defaultSource }: Props) {
               data-testid="pg-example"
             >
               {!source && <option value="">Your draft</option>}
-              <optgroup label="Gallery">
-                {galleryExamples.map((e) => (
-                  <option key={e.source} value={e.source}>
-                    {e.title} · {e.typeLabel}
-                  </option>
-                ))}
-              </optgroup>
-              {lifeExamples.length > 0 && (
-                <optgroup label="Beyond code">
-                  {lifeExamples.map((e) => (
+              {exampleGroups.map(([label, group]) => (
+                <optgroup key={label} label={label}>
+                  {group.map((e) => (
                     <option key={e.source} value={e.source}>
                       {e.title} · {e.typeLabel}
                     </option>
                   ))}
                 </optgroup>
-              )}
+              ))}
             </select>
             {source && edited && (
               <button type="button" className={`button ${styles.small}`} onClick={() => void loadExample(source)}>

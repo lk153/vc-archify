@@ -6,7 +6,7 @@
       "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",
-        "../../gallery/**",
+        "../../examples/**",
         "../../skills/vc-archify/**",
         "../../packages/render/src/**",
         "../../packages/browser-engine/**"
@@ -15,10 +15,10 @@
       "env": ["NEXT_PUBLIC_SITE_URL", "GITHUB_TOKEN"]
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "../../gallery/**", "../../skills/vc-archify/**", "../../design/**"]
+      "inputs": ["$TURBO_DEFAULT$", "../../examples/**", "../../skills/vc-archify/**", "../../design/**"]
     },
     "typecheck": {
-      "inputs": ["$TURBO_DEFAULT$", "../../gallery/**"]
+      "inputs": ["$TURBO_DEFAULT$", "../../examples/**"]
     },
     "dev": {
       "cache": false,
