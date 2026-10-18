@@ -226,7 +226,7 @@ Storage: viewer preferences use `localStorage` only inside `try/catch`, because 
 
 | Route | Content | Rendering on Vercel |
 | --- | --- | --- |
-| `/` | **The playground:** example picker (12 technical diagrams grouped by type), IR JSON editor, engine diagnostics with JSON-pointer "Go to", live preview in a `srcdoc` sandbox iframe (Match site / Dark / Light), Download HTML / Download JSON | Static; rendering is 100 % client-side in a Web Worker |
+| `/` | **The playground, full screen:** the live preview (`srcdoc` sandbox iframe) fills the viewport; a resizable, collapsible configuration panel on the left holds the example picker (12 technical diagrams grouped by type), Render / Auto-render, preview theme (Match site / Dark / Light), engine diagnostics with JSON-pointer "Go to", the IR JSON editor and Download HTML / JSON. Below 900 px it stacks. | Static; rendering is 100 % client-side in a Web Worker |
 | `/examples/[file].json` | The IR the page loads when an example is picked (from repo-root `examples/`) | force-static route handler |
 | `/engine/*` | The in-browser engine bundle (`packages/browser-engine` build output) | Static files |
 | `/playground`, `/gallery/*`, `/start`, `/guide`, `/community`, `/cases/*` | 308 redirect to `/` | Redirect |

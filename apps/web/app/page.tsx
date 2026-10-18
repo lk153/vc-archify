@@ -1,6 +1,5 @@
 import { Playground, type PlaygroundExample } from '@/components/playground/Playground';
 import { exampleEntries, TYPE_LABELS } from '@/lib/examples';
-import styles from './page.module.css';
 
 // The whole app: one page to write diagram IR and render it in the browser.
 export default function HomePage() {
@@ -16,9 +15,9 @@ export default function HomePage() {
   const defaultSource = (examples.find((e) => e.type === 'architecture') ?? examples[0]).source;
 
   return (
-    <div className={`container ${styles.page}`}>
+    <>
       <h1 className="visually-hidden">vc-archify: render architecture diagrams from JSON</h1>
       <Playground examples={examples} defaultSource={defaultSource} />
-    </div>
+    </>
   );
 }

@@ -2,9 +2,8 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-import { BrandMark } from '@/components/BrandMark';
-import { ThemeToggle, themeBootstrap } from '@/components/ThemeToggle';
-import { DESCRIPTION, REPO_URL, SITE_NAME, SITE_URL, UPSTREAM_URL } from '@/lib/site';
+import { themeBootstrap } from '@/components/ThemeToggle';
+import { DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/site';
 import './globals.css';
 import './site.css';
 
@@ -40,19 +39,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: chunkReload }} />
       </head>
       <body>
-        <header className="app-header">
-          <div className="container app-header-inner">
-            <span className="brand">
-              <BrandMark size={26} />
-              <span>{SITE_NAME}</span>
-            </span>
-            <ThemeToggle />
-          </div>
-        </header>
         <main id="main">{children}</main>
-        <footer className="app-footer container">
-          <a href={REPO_URL}>{SITE_NAME}</a> · MIT · built on the <a href={UPSTREAM_URL}>Archify</a> engine
-        </footer>
         {insights && (
           <>
             <Analytics />

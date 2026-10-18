@@ -46,3 +46,36 @@ test('security headers are set', async ({ request }) => {
   expect(headers['x-frame-options']).toBe('SAMEORIGIN');
   expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
 });
+
+test.describe('full-page layout', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('the preview fills the viewport next to the configuration panel', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('pg-status')).toHaveAttribute('data-state', 'ok', { timeout: 30_000 });
+    const panel = await page.getByRole('complementary', { name: 'Diagram configuration' }).boundingBox();
+    const frame = await page.getByTestId('pg-preview').boundingBox();
+    expect(panel && frame).toBeTruthy();
+    expect(frame!.height).toBeGreaterThanOrEqual(899); // full viewport height
+    expect(frame!.x + frame!.width).toBeGreaterThanOrEqual(1439); // reaches the right edge
+    expect(Math.round(panel!.width + frame!.width)).toBeGreaterThanOrEqual(1432); // panel + preview ≈ viewport
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(900); // no page scroll
+  });
+
+  test('the panel can be hidden for a full-width preview and resized', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByTestId('pg-status')).toHaveAttribute('data-state', 'ok', { timeout: 30_000 });
+    await page.getByTestId('pg-hide-panel').click();
+    await expect(page.getByRole('complementary', { name: 'Diagram configuration' })).toBeHidden();
+    await expect.poll(async () => (await page.getByTestId('pg-preview').boundingBox())?.width).toBeGreaterThanOrEqual(1439);
+    await page.getByTestId('pg-show-panel').click();
+    await expect(page.getByTestId('pg-editor')).toBeVisible();
+
+    const separator = page.getByRole('separator', { name: 'Resize configuration panel' });
+    const before = Number(await separator.getAttribute('aria-valuenow'));
+    await separator.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(separator).toHaveAttribute('aria-valuenow', String(before + 40));
+  });
+});

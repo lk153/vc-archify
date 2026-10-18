@@ -1,25 +1,4 @@
-/* App chrome: a slim header (brand + theme toggle) and a one-line footer. */
-
-.app-header {
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-}
-
-.app-header-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 52px;
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-weight: 700;
-}
+/* App chrome shared outside the playground component. */
 
 .theme-toggle {
   width: 36px;
@@ -32,13 +11,6 @@
   cursor: pointer;
 }
 
-.app-footer {
-  padding-top: 8px;
-  padding-bottom: 20px;
-  color: var(--text-dim);
-  font-size: 0.8rem;
-}
-
-.app-footer a {
-  color: var(--text-muted);
+.theme-toggle:hover {
+  border-color: var(--accent);
 }

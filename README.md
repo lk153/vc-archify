@@ -6,7 +6,7 @@ vc-archify is an agent skill (Claude Code, Codex, Cursor, OpenCode, GitHub Copil
 
 Featured diagram types: **architecture · workflow · sequence · dataflow · lifecycle · erd**. The engine also renders class, tree, timeline and waterfall diagrams.
 
-**The web app is one page: a playground.** Pick an example or paste IR JSON, see engine diagnostics, preview the interactive diagram (dark/light), and download the HTML or JSON. Rendering runs in your browser; nothing is uploaded.
+**The web app is one full-screen page.** The live, interactive diagram viewer fills the window; a resizable, collapsible configuration panel on the left holds the example picker, render controls, preview theme, diagnostics, the IR JSON editor and the HTML/JSON downloads. Rendering runs in your browser; nothing is uploaded.
 
 > vc-archify is a personal, non-commercial fork of [Archify](https://github.com/tt-a1i/archify) (MIT), itself based on [Cocoon-AI/architecture-diagram-generator](https://github.com/Cocoon-AI/architecture-diagram-generator). It is not affiliated with archify.si. See [NOTICE](NOTICE) and [docs/adr/0001-build-vs-fork.md](docs/adr/0001-build-vs-fork.md).
 

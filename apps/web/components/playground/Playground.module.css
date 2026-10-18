@@ -1,321 +1,192 @@
-.playground {
+/* Full-viewport app shell: a configuration panel on the left and the live
+   diagram viewer filling everything else. Below 900px it stacks and scrolls. */
+
+.app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: var(--panel-width, 440px) 6px minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-.toolbar {
+.app[data-panel='closed'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app[data-resizing='true'] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* While dragging, the iframe would swallow pointer events. */
+.app[data-resizing='true'] .frame {
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- panel -- */
+
+.panel {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px 20px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+  gap: 8px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.panelHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  border-color: var(--accent);
+}
+
+.controls {
+  display: grid;
+  gap: 10px;
 }
 
 .field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  flex: 1 1 280px;
+  gap: 4px;
   min-width: 0;
 }
 
 .field > label,
-.editorLabel {
+.editorLabel,
+.inlineLegend {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
-.exampleRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .select {
-  flex: 1 1 220px;
   width: 100%;
   min-width: 0;
-  max-width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 38px;
+  padding: 6px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
 }
 
-.actions {
+.row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
 .check {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 36px;
   color: var(--text);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
 .check input,
 .themeOption input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   margin: 0;
   accent-color: var(--accent);
 }
 
 .small {
-  min-height: 36px;
-  padding: 6px 14px;
+  min-height: 34px;
+  padding: 5px 14px;
   font-size: 0.85rem;
 }
 
-.playground :global(.button):disabled {
+.tiny {
+  min-height: 28px;
+  padding: 3px 12px;
+  font-size: 0.8rem;
+}
+
+.app :global(.button):disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-}
-
-@media (min-width: 1080px) {
-  .workspace {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    align-items: start;
-  }
-}
-
-.editorColumn,
-.previewColumn {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  min-width: 0;
-}
-
-.previewPanel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  min-width: 0;
-}
-
-.editorHeader,
-.previewHeader {
+.themes {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 36px;
-}
-
-.muted {
-  color: var(--text-dim);
-  font-weight: 400;
-}
-
-.editor {
-  display: block;
-  width: 100%;
-  min-height: 320px;
-  height: min(62vh, 640px);
-  padding: 12px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.55;
-  tab-size: 2;
-  white-space: pre;
-  overflow: auto;
-  resize: vertical;
-}
-
-.editor:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.editor::selection {
-  background: color-mix(in srgb, var(--focus) 40%, transparent);
-}
-
-.help {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.help kbd {
-  padding: 1px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--bg-elevated);
-  font-size: 0.8rem;
-}
-
-.diagnostics {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.panelTitle {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
-}
-
-.status {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-.status[data-state='ok'] {
-  color: var(--accent);
-}
-
-.status[data-state='error'] {
-  color: var(--kind-security);
-}
-
-.diagList {
-  display: grid;
-  gap: 10px;
+  gap: 4px;
+  min-width: 0;
   margin: 0;
   padding: 0;
-  list-style: none;
-}
-
-.diag {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--kind-security);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-}
-
-.diag[data-severity='warning'] {
-  border-left-color: var(--kind-cloud);
-}
-
-.diagHead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.code {
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--kind-security) 16%, transparent);
-  color: var(--text);
-  font-size: 0.78rem;
-}
-
-.linkButton {
-  min-height: 32px;
-  padding: 4px 0;
   border: 0;
-  background: none;
-  color: var(--link);
-  font: inherit;
-  font-size: 0.85rem;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-  text-align: left;
 }
 
-.linkButton code {
-  font-size: 0.82rem;
-}
-
-.message {
-  margin: 0;
-  font-size: 0.9rem;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.fixes {
-  font-size: 0.85rem;
-}
-
-.fixesLabel {
-  margin: 0;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.fixes ul,
-.warnings ul {
-  margin: 4px 0 0;
-  padding-left: 20px;
-  overflow-wrap: anywhere;
-}
-
-.warnings {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.warnings summary {
-  cursor: pointer;
-}
-
-.themes {
-  display: inline-flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 3px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
+.inlineLegend {
+  float: left;
+  margin-right: 8px;
+  padding: 0;
 }
 
 .themeOption {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 4px 12px;
+  min-height: 30px;
+  padding: 3px 12px;
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   cursor: pointer;
 }
 
 .themeOption:has(input:checked) {
+  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -331,60 +202,348 @@
   pointer-events: none;
 }
 
-.frameWrap {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+/* ---------------------------------------------------------- diagnostics -- */
+
+.diagnostics {
+  display: grid;
+  gap: 8px;
+  max-height: 34%;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  overflow: auto;
+}
+
+.status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.status[data-state='ok'] {
+  color: var(--accent);
+}
+
+.status[data-state='error'] {
+  color: var(--kind-security);
+}
+
+.diagList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diag {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--kind-security);
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
+}
+
+.diag[data-severity='warning'] {
+  border-left-color: var(--kind-cloud);
+}
+
+.diagHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.code {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--kind-security) 16%, transparent);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.linkButton {
+  min-height: 28px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.linkButton code {
+  font-size: 0.8rem;
+}
+
+.message {
+  margin: 0;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fixes {
+  font-size: 0.82rem;
+}
+
+.fixesLabel {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.fixes ul,
+.warnings ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.warnings {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.warnings summary {
+  cursor: pointer;
+}
+
+/* --------------------------------------------------------------- editor -- */
+
+.editorBlock {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 160px;
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.muted {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.editor {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  resize: none;
+}
+
+.editor:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.editor::selection {
+  background: color-mix(in srgb, var(--focus) 40%, transparent);
+}
+
+.help {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.help kbd {
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.75rem;
+}
+
+.panelFooter {
+  display: grid;
+  gap: 6px;
+}
+
+.credits {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.credits a {
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- resizer -- */
+
+/* A 6px grab area drawn as a 1px line; it lights up while hovered or dragged. */
+.resizer {
+  position: relative;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border-strong);
+  transition: background 0.15s, left 0.15s, width 0.15s;
+}
+
+.resizer:hover::after,
+.resizer:focus-visible::after,
+.app[data-resizing='true'] .resizer::after {
+  left: 1px;
+  width: 4px;
+  background: var(--accent);
+}
+
+.resizer:focus-visible {
+  outline: none;
+}
+
+/* ---------------------------------------------------------------- stage -- */
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.frameWrap {
+  position: absolute;
+  inset: 0;
   transition: opacity 0.2s;
 }
 
-.frameWrap[data-stale='true'] {
+.frameWrap[data-stale='true'] .frame {
   opacity: 0.6;
 }
 
 .frame {
   display: block;
   width: 100%;
-  height: min(78vh, 820px);
-  min-height: 420px;
+  height: 100%;
   border: 0;
 }
 
 .placeholder {
   display: grid;
   place-items: center;
-  min-height: 420px;
+  height: 100%;
   padding: 24px;
   color: var(--text-muted);
   text-align: center;
 }
 
-.downloads {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+.staleBadge {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--kind-security);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.78rem;
+  pointer-events: none;
 }
 
-@media (max-width: 480px) {
-  .toolbar,
+/* A slim tab on the left edge brings the panel back. */
+.showPanel {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  width: 22px;
+  height: 64px;
+  border: 1px solid var(--border-strong);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.showPanel:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------- narrow screens ---- */
+
+@media (max-width: 899px) {
+  .app,
+  .app[data-panel='closed'] {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .panel,
+  .panel[hidden] {
+    display: flex;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panelHeaderActions .iconButton,
+  .resizer,
+  .showPanel {
+    display: none;
+  }
+
   .diagnostics {
-    padding: 12px;
+    max-height: 40vh;
   }
-  .editor {
-    font-size: 12px;
-  }
-  .frame,
-  .placeholder {
-    min-height: 360px;
-    height: 70vh;
-  }
-}
 
-@media (min-width: 1080px) {
+  .editorBlock {
+    flex: none;
+  }
+
   .editor {
-    height: min(82vh, 920px);
+    height: 42vh;
+    min-height: 220px;
+  }
+
+  .stage {
+    height: 80vh;
+    height: 80dvh;
+    min-height: 420px;
   }
 }

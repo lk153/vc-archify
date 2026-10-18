@@ -1,6 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { BrandMark } from '@/components/BrandMark';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { REPO_URL, SITE_NAME, UPSTREAM_URL } from '@/lib/site';
 import { preloadEngine, renderInBrowser, type DiagramType, type EngineDiagnostic, type RenderSuccess } from './engine';
 import { locatePointer, offsetOf } from './jsonLocate';
 import { withPreviewTheme, type PreviewTheme, type ResolvedTheme } from './previewTheme';
@@ -31,12 +34,20 @@ interface Stored {
   edited?: boolean;
   autoRender?: boolean;
   previewTheme?: PreviewTheme;
+  panelWidth?: number;
+  panelOpen?: boolean;
 }
 
 type Rendered = RenderSuccess & { text: string };
 
 const STORAGE_KEY = 'vca-playground-v1';
 const AUTO_RENDER_DELAY_MS = 700;
+// Configuration panel width (px). The preview takes everything else.
+const PANEL_DEFAULT = 440;
+const PANEL_MIN = 320;
+const PANEL_MAX_RATIO = 0.6;
+const clampPanel = (width: number) =>
+  Math.round(Math.min(Math.max(width, PANEL_MIN), Math.max(PANEL_MIN, window.innerWidth * PANEL_MAX_RATIO)));
 const THEMES: { value: PreviewTheme; label: string }[] = [
   { value: 'site', label: 'Match site' },
   { value: 'dark', label: 'Dark' },
@@ -116,6 +127,9 @@ export function Playground({ examples, defaultSource }: Props) {
   const [ready, setReady] = useState(false);
   const [autoRender, setAutoRender] = useState(true);
   const [previewTheme, setPreviewTheme] = useState<PreviewTheme>('site');
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [resizing, setResizing] = useState(false);
   const [siteTheme, setSiteTheme] = useState<ResolvedTheme>('dark');
   const [status, setStatus] = useState<Status>({ state: 'loading', message: 'Loading the playground…' });
   const [rendered, setRendered] = useState<Rendered | null>(null);
@@ -197,6 +211,8 @@ export function Playground({ examples, defaultSource }: Props) {
     const stored = readStored();
     if (typeof stored.autoRender === 'boolean') setAutoRender(stored.autoRender);
     if (stored.previewTheme && THEMES.some((t) => t.value === stored.previewTheme)) setPreviewTheme(stored.previewTheme);
+    if (typeof stored.panelWidth === 'number') setPanelWidth(clampPanel(stored.panelWidth));
+    if (typeof stored.panelOpen === 'boolean') setPanelOpen(stored.panelOpen);
     let requested: string | null = null;
     try {
       requested = new URLSearchParams(window.location.search).get('example');
@@ -231,9 +247,36 @@ export function Playground({ examples, defaultSource }: Props) {
   // Remember the draft and preferences.
   useEffect(() => {
     if (!ready) return undefined;
-    const timer = window.setTimeout(() => writeStored({ text, source, edited, autoRender, previewTheme }), 400);
+    const timer = window.setTimeout(() => writeStored({ text, source, edited, autoRender, previewTheme, panelWidth, panelOpen }), 400);
     return () => window.clearTimeout(timer);
-  }, [text, source, edited, autoRender, previewTheme, ready]);
+  }, [text, source, edited, autoRender, previewTheme, panelWidth, panelOpen, ready]);
+
+  // Drag the divider to resize the configuration panel (pointer) or use the arrow keys.
+  const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = panelWidth;
+    setResizing(true);
+    const move = (e: PointerEvent) => setPanelWidth(clampPanel(startWidth + e.clientX - startX));
+    const stop = () => {
+      setResizing(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+  };
+  const resizeByKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 80 : 20;
+    if (event.key === 'ArrowLeft') setPanelWidth((w) => clampPanel(w - step));
+    else if (event.key === 'ArrowRight') setPanelWidth((w) => clampPanel(w + step));
+    else if (event.key === 'Home') setPanelWidth(clampPanel(PANEL_MIN));
+    else if (event.key === 'End') setPanelWidth(clampPanel(window.innerWidth));
+    else return;
+    event.preventDefault();
+  };
 
   // Follow the site theme (header toggle or system preference).
   useEffect(() => {
@@ -317,11 +360,38 @@ export function Playground({ examples, defaultSource }: Props) {
   })();
 
   return (
-    <div className={styles.playground}>
-      <div className={styles.toolbar}>
-        <div className={styles.field}>
-          <label htmlFor={exampleId}>Example</label>
-          <div className={styles.exampleRow}>
+    <div
+      className={styles.app}
+      data-panel={panelOpen ? 'open' : 'closed'}
+      data-resizing={resizing ? 'true' : undefined}
+      style={{ '--panel-width': `${panelWidth}px` } as CSSProperties}
+    >
+      <aside id={`${ids}-panel`} className={styles.panel} aria-label="Diagram configuration" hidden={!panelOpen}>
+        <header className={styles.panelHeader}>
+          <span className={styles.brand}>
+            <BrandMark size={22} />
+            <span>{SITE_NAME}</span>
+          </span>
+          <div className={styles.panelHeaderActions}>
+            <ThemeToggle />
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={() => setPanelOpen(false)}
+              aria-controls={`${ids}-panel`}
+              aria-expanded={panelOpen}
+              aria-label="Hide configuration panel"
+              title="Hide panel: show the preview full width"
+              data-testid="pg-hide-panel"
+            >
+              <span aria-hidden="true">«</span>
+            </button>
+          </div>
+        </header>
+
+        <div className={styles.controls}>
+          <div className={styles.field}>
+            <label htmlFor={exampleId}>Example</label>
             <select
               id={exampleId}
               className={styles.select}
@@ -340,31 +410,97 @@ export function Playground({ examples, defaultSource }: Props) {
                 </optgroup>
               ))}
             </select>
+          </div>
+          <div className={styles.row}>
+            <button type="button" className={`button primary ${styles.small}`} onClick={() => void render(text)} disabled={!ready} data-testid="pg-render">
+              Render
+            </button>
+            <label className={styles.check}>
+              <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
+              Auto-render
+            </label>
             {source && edited && (
               <button type="button" className={`button ${styles.small}`} onClick={() => void loadExample(source)}>
                 Revert edits
               </button>
             )}
           </div>
+          <fieldset className={styles.themes}>
+            <legend className={styles.inlineLegend}>Preview theme</legend>
+            {THEMES.map((theme) => (
+              <label key={theme.value} className={styles.themeOption}>
+                <input
+                  type="radio"
+                  name={`${ids}-theme`}
+                  value={theme.value}
+                  checked={previewTheme === theme.value}
+                  onChange={() => setPreviewTheme(theme.value)}
+                />
+                <span>{theme.label}</span>
+              </label>
+            ))}
+          </fieldset>
         </div>
-        <div className={styles.actions}>
-          <button type="button" className="button primary" onClick={() => void render(text)} disabled={!ready} data-testid="pg-render">
-            Render
-          </button>
-          <label className={styles.check}>
-            <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
-            Auto-render
-          </label>
-        </div>
-      </div>
 
-      <div className={styles.workspace}>
-        <div className={styles.editorColumn}>
+        <section className={styles.diagnostics} aria-labelledby={`${ids}-diag`} data-testid="pg-diagnostics">
+          <h2 id={`${ids}-diag`} className="visually-hidden">
+            Diagnostics
+          </h2>
+          <p id={statusId} role="status" aria-live="polite" className={styles.status} data-state={status.state} data-renders={renderCount} data-testid="pg-status">
+            {statusText}
+          </p>
+          {diagnostics.length > 0 && (
+            <ol className={styles.diagList}>
+              {diagnostics.map((d, index) => (
+                <li key={`${d.code}-${index}`} className={styles.diag} data-severity={d.severity}>
+                  <div className={styles.diagHead}>
+                    {d.code && <code className={styles.code}>{d.code}</code>}
+                    {d.path && (
+                      <button type="button" className={styles.linkButton} onClick={() => goToPointer(d.path!)}>
+                        Go to <code>{d.path}</code>
+                      </button>
+                    )}
+                    {d.line !== undefined && (
+                      <button type="button" className={styles.linkButton} onClick={() => goToLine(d.line!, d.column ?? 1)}>
+                        Go to line {d.line}, column {d.column ?? 1}
+                      </button>
+                    )}
+                  </div>
+                  <p className={styles.message}>{d.message}</p>
+                  {d.fixes.length > 0 && (
+                    <div className={styles.fixes}>
+                      <p className={styles.fixesLabel}>Suggested {d.fixes.length === 1 ? 'fix' : 'fixes'}</p>
+                      <ul>
+                        {d.fixes.map((fix) => (
+                          <li key={fix}>{fix}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {warnings.length > 0 && (
+            <details className={styles.warnings}>
+              <summary>
+                {warnings.length} engine {warnings.length === 1 ? 'notice' : 'notices'}
+              </summary>
+              <ul>
+                {warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
+
+        <div className={styles.editorBlock}>
           <div className={styles.editorHeader}>
             <label htmlFor={editorId} className={styles.editorLabel}>
               IR JSON{currentExample ? <span className={styles.muted}> · {currentExample.title}{edited ? ' (edited)' : ''}</span> : null}
             </label>
-            <button type="button" className={`button ${styles.small}`} onClick={formatJson} disabled={!ready}>
+            <button type="button" className={`button ${styles.tiny}`} onClick={formatJson} disabled={!ready}>
               Format
             </button>
           </div>
@@ -390,124 +526,91 @@ export function Playground({ examples, defaultSource }: Props) {
             data-testid="pg-editor"
           />
           <p id={helpId} className={styles.help}>
-            Edits render automatically when Auto-render is on. Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> (<kbd>⌘</kbd> + <kbd>Enter</kbd> on
-            macOS) to render now. Everything runs in your browser; nothing is uploaded.
+            <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> renders now. Everything runs in your browser; nothing is uploaded.
           </p>
         </div>
 
-        <div className={styles.previewColumn}>
-          <section className={styles.diagnostics} aria-labelledby={`${ids}-diag`} data-testid="pg-diagnostics">
-            <h2 id={`${ids}-diag`} className={styles.panelTitle}>
-              Diagnostics
-            </h2>
-            <p id={statusId} role="status" aria-live="polite" className={styles.status} data-state={status.state} data-renders={renderCount} data-testid="pg-status">
-              {statusText}
-            </p>
-            {diagnostics.length > 0 && (
-              <ol className={styles.diagList}>
-                {diagnostics.map((d, index) => (
-                  <li key={`${d.code}-${index}`} className={styles.diag} data-severity={d.severity}>
-                    <div className={styles.diagHead}>
-                      {d.code && <code className={styles.code}>{d.code}</code>}
-                      {d.path && (
-                        <button type="button" className={styles.linkButton} onClick={() => goToPointer(d.path!)}>
-                          Go to <code>{d.path}</code>
-                        </button>
-                      )}
-                      {d.line !== undefined && (
-                        <button type="button" className={styles.linkButton} onClick={() => goToLine(d.line!, d.column ?? 1)}>
-                          Go to line {d.line}, column {d.column ?? 1}
-                        </button>
-                      )}
-                    </div>
-                    <p className={styles.message}>{d.message}</p>
-                    {d.fixes.length > 0 && (
-                      <div className={styles.fixes}>
-                        <p className={styles.fixesLabel}>Suggested {d.fixes.length === 1 ? 'fix' : 'fixes'}</p>
-                        <ul>
-                          {d.fixes.map((fix) => (
-                            <li key={fix}>{fix}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            )}
-            {warnings.length > 0 && (
-              <details className={styles.warnings}>
-                <summary>
-                  {warnings.length} engine {warnings.length === 1 ? 'notice' : 'notices'}
-                </summary>
-                <ul>
-                  {warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </section>
-          <section className={styles.previewPanel} aria-labelledby={`${ids}-preview`}>
-            <div className={styles.previewHeader}>
-              <h2 id={`${ids}-preview`} className={styles.panelTitle}>
-                Preview
-              </h2>
-              <fieldset className={styles.themes}>
-                <legend className="visually-hidden">Preview theme</legend>
-                {THEMES.map((theme) => (
-                  <label key={theme.value} className={styles.themeOption}>
-                    <input
-                      type="radio"
-                      name={`${ids}-theme`}
-                      value={theme.value}
-                      checked={previewTheme === theme.value}
-                      onChange={() => setPreviewTheme(theme.value)}
-                    />
-                    <span>{theme.label}</span>
-                  </label>
-                ))}
-              </fieldset>
-            </div>
-            <div className={styles.frameWrap} data-stale={stale || status.state === 'error' ? 'true' : 'false'}>
-              {rendered ? (
-                <iframe
-                  title={`Diagram preview: ${rendered.type}`}
-                  className={styles.frame}
-                  sandbox="allow-scripts allow-downloads"
-                  referrerPolicy="no-referrer"
-                  srcDoc={srcDoc}
-                  data-testid="pg-preview"
-                  data-theme={effectiveTheme}
-                />
-              ) : (
-                <div className={styles.placeholder}>{status.state === 'error' ? 'Fix the problems to see a preview.' : 'The diagram appears here.'}</div>
-              )}
-            </div>
-            <div className={styles.downloads}>
-              <button
-                type="button"
-                className="button"
-                disabled={!rendered}
-                onClick={() => rendered && download(`${baseName(rendered.text, source, edited, rendered.type)}.html`, rendered.html, 'text/html;charset=utf-8')}
-                data-testid="pg-download-html"
-              >
-                Download HTML
-              </button>
-              <button
-                type="button"
-                className="button"
-                disabled={!text.trim()}
-                onClick={() => download(`${name}.json`, text, 'application/json;charset=utf-8')}
-                data-testid="pg-download-json"
-              >
-                Download JSON
-              </button>
-              {stale && rendered && <span className={styles.muted}>Download HTML saves the last successful render.</span>}
-            </div>
-          </section>
+        <footer className={styles.panelFooter}>
+          <div className={styles.row}>
+            <button
+              type="button"
+              className={`button ${styles.small}`}
+              disabled={!rendered}
+              onClick={() => rendered && download(`${baseName(rendered.text, source, edited, rendered.type)}.html`, rendered.html, 'text/html;charset=utf-8')}
+              data-testid="pg-download-html"
+            >
+              Download HTML
+            </button>
+            <button
+              type="button"
+              className={`button ${styles.small}`}
+              disabled={!text.trim()}
+              onClick={() => download(`${name}.json`, text, 'application/json;charset=utf-8')}
+              data-testid="pg-download-json"
+            >
+              Download JSON
+            </button>
+          </div>
+          {stale && rendered && <p className={styles.muted}>Download HTML saves the last successful render.</p>}
+          <p className={styles.credits}>
+            <a href={REPO_URL}>{SITE_NAME}</a> · MIT · built on the <a href={UPSTREAM_URL}>Archify</a> engine
+          </p>
+        </footer>
+      </aside>
+
+      {panelOpen && (
+        <div
+          className={styles.resizer}
+          role="separator"
+          aria-orientation="vertical"
+          aria-controls={`${ids}-panel`}
+          aria-label="Resize configuration panel"
+          aria-valuemin={PANEL_MIN}
+          aria-valuenow={panelWidth}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onKeyDown={resizeByKey}
+          onDoubleClick={() => setPanelWidth(clampPanel(PANEL_DEFAULT))}
+        />
+      )}
+
+      <section className={styles.stage} aria-labelledby={`${ids}-preview`}>
+        <h2 id={`${ids}-preview`} className="visually-hidden">
+          Preview
+        </h2>
+        {!panelOpen && (
+          <button
+            type="button"
+            className={styles.showPanel}
+            onClick={() => setPanelOpen(true)}
+            aria-controls={`${ids}-panel`}
+            aria-expanded={panelOpen}
+            aria-label="Show configuration panel"
+            title="Show panel"
+            data-testid="pg-show-panel"
+          >
+            <span aria-hidden="true">»</span>
+          </button>
+        )}
+        <div className={styles.frameWrap} data-stale={stale || status.state === 'error' ? 'true' : 'false'}>
+          {rendered ? (
+            <iframe
+              title={`Diagram preview: ${rendered.type}`}
+              className={styles.frame}
+              sandbox="allow-scripts allow-downloads"
+              referrerPolicy="no-referrer"
+              srcDoc={srcDoc}
+              data-testid="pg-preview"
+              data-theme={effectiveTheme}
+            />
+          ) : (
+            <div className={styles.placeholder}>{status.state === 'error' ? 'Fix the problems to see a preview.' : 'The diagram appears here.'}</div>
+          )}
+          {rendered && (stale || status.state === 'error') && (
+            <p className={styles.staleBadge}>Showing the last successful render</p>
+          )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
