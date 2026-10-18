@@ -82,13 +82,13 @@ GitHub Actions builds and deploys with the Vercel CLI. Vercel's own Git auto-dep
 One-time setup:
 
 1. **Vercel project settings:** Framework **Next.js**, **Root Directory `apps/web`**, and "Include files outside the root directory" **on**. Node.js version: 24.x is read from `engines.node`.
-2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` if your production domain isn't `vc-archify.vercel.app`.
+2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` to your production domain (Vercel → Project → Domains) so each deploy also smoke-tests it after promotion, with auto-rollback on failure.
 3. **Vercel environment variables (optional):** `NEXT_PUBLIC_SITE_URL` if you use a custom domain (the default is `https://vc-archify.vercel.app`), and `NEXT_PUBLIC_VERCEL_ANALYTICS=1` after enabling Web Analytics.
 
 Flow ([`.github/workflows/`](.github/workflows/)):
 
 - **Pull request** → `ci.yml` (gates) and `deploy.yml` (preview deployment + smoke test, with the URL commented on the PR).
-- **Push to `main`** → `ci.yml`. When it passes, `deploy.yml` builds a staged production deployment, smoke-tests it (`scripts/smoke.mjs`; skipped if the URL is protected and there is no bypass secret), promotes it, then smoke-tests the production domain. If that fails, it rolls back automatically to the previous production deployment.
+- **Push to `main`** → `ci.yml`. When it passes, `deploy.yml` builds a staged production deployment, smoke-tests it (`scripts/smoke.mjs`, reaching the protected deployment URL through `vercel curl`), promotes it, then smoke-tests the production domain if `PRODUCTION_HOST` is set. If that fails, it rolls back automatically to the previous production deployment.
 - **Rollback** → Instant Rollback in the Vercel dashboard or `vercel rollback <previous-deployment-url>` (Hobby can only return to the previous production deployment), or run the **Deploy** workflow manually with an older tag/commit. See [docs/runbook.md](docs/runbook.md).
 
 Deploying by hand from your machine works the same way:

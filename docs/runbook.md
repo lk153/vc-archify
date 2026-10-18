@@ -5,7 +5,8 @@ This is the one-page operating guide for the personal Vercel Hobby deployment (P
 ## Health check
 
 ```bash
-pnpm smoke https://vc-archify.vercel.app
+pnpm smoke https://<your-production-domain>          # e.g. the domain in Vercel → Project → Domains
+VERCEL_TOKEN=… pnpm smoke <deployment-url> --vercel-curl   # a protected deployment URL
 ```
 
 It checks the playground page and its security headers, the in-browser engine bundle (`/engine/manifest.json`), an example IR, and the redirects from the former multi-page URLs.
