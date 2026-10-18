@@ -198,16 +198,29 @@ patch(path.join(skillDir, 'renderers', 'shared', 'cli.mjs'), [
   ],
 ]);
 
+// Artifact <head>: name the generator vc-archify and declare an inline (data:)
+// icon, so browsers never probe /favicon.ico. That probe is a network request
+// the artifact CSP (img-src data: blob:) would block and report.
+const ICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M18 22h14M32 22v20M32 42h14' fill='none' stroke='%2394a3b8' stroke-width='3' stroke-linecap='round'/%3E%3Crect x='9' y='15' width='18' height='14' rx='4' fill='%23083344' stroke='%2322d3ee' stroke-width='2.5'/%3E%3Crect x='37' y='35' width='18' height='14' rx='4' fill='%23064e3b' stroke='%2334d399' stroke-width='2.5'/%3E%3Ccircle cx='32' cy='32' r='4' fill='%23a78bfa'/%3E%3C/svg%3E";
+patch(path.join(viewerDir, 'template.source.html'), [[
+  `  <meta name="generator" content="archify ${JSON.parse(fs.readFileSync(path.join(skillDir, 'package.json'), 'utf8')).version}">\n`,
+  `  <meta name="generator" content="vc-archify ${JSON.parse(fs.readFileSync(path.join(skillDir, 'package.json'), 'utf8')).version} (Archify engine)">\n  <link rel="icon" href="${ICON}">\n`,
+]]);
+
 // --- 5. provenance --------------------------------------------------------------
 let commit = 'unknown';
 try { commit = execFileSync('git', ['-C', upstream, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(); } catch {}
 const release = JSON.parse(fs.readFileSync(path.join(skillDir, 'skill-release.json'), 'utf8'));
+let previous = {};
+try { previous = JSON.parse(fs.readFileSync(path.join(ROOT, 'UPSTREAM.json'), 'utf8')); } catch {}
+// Keep the sync date stable when re-running against the same upstream commit.
+const syncedAt = previous.commit === commit && previous.syncedAt ? previous.syncedAt : new Date().toISOString().slice(0, 10);
 fs.writeFileSync(path.join(ROOT, 'UPSTREAM.json'), `${JSON.stringify({
   upstream: 'https://github.com/tt-a1i/archify',
   license: 'MIT',
   commit,
   version: release.version,
-  syncedAt: new Date().toISOString().slice(0, 10),
+  syncedAt,
   vendored: {
     'archify/': 'skills/vc-archify/',
     'viewer/': 'packages/viewer/src/',
@@ -216,5 +229,8 @@ fs.writeFileSync(path.join(ROOT, 'UPSTREAM.json'), `${JSON.stringify({
   },
 }, null, 2)}\n`);
 
-console.log(`Vendored upstream ${commit.slice(0, 12)} (v${release.version}); rebranded ${changed} files.`);
-console.log('Next: pnpm viewer:build  (regenerates skills/vc-archify/assets/template.html)');
+// The shipped template is generated from the (patched) viewer sources.
+const { generateViewer } = await import(path.join(ROOT, 'packages', 'viewer', 'scripts', 'generate-viewer.mjs'));
+generateViewer();
+
+console.log(`Vendored upstream ${commit.slice(0, 12)} (v${release.version}); rebranded ${changed} files; regenerated the viewer template.`);

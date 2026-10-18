@@ -33,6 +33,7 @@
 | Website | Landing, Start wizard, Gallery, Guide, Community, Playground. **English only.** |
 | Branding | Public product name **vc-archify** on the site, the CLI, the skill and generated artifacts, with upstream attribution (§9). |
 | Platform | Production on **Vercel Hobby** with preview-per-PR (deployed from CI), CDN static delivery, security headers, analytics, rollback. |
+| Browsers | **Chromium-based only** (D7). |
 
 ### Out of scope (v1), tracked for later
 
@@ -215,8 +216,8 @@ Storage: viewer preferences use `localStorage` only inside `try/catch`, because 
 | Format | Method | Notes / risk |
 | --- | --- | --- |
 | Dual-theme SVG | Serialize the live SVG with both variable blocks + `@media (prefers-color-scheme)` + embedded fonts | Same format as the files in `design/` |
-| PNG / JPEG / WebP | SVG → Blob URL → `Image` → `canvas` at scale ≤ 4 → `toBlob` | **Clamp the scale to the browser's canvas-area limit.** Safari caps a canvas at ~16.7 M px, and 1376×790 at 4× is 17.4 M px. Show the effective scale in the menu. |
-| WebM motion | Step the trace animation deterministically (Web Animations API `currentTime`) → draw each frame to canvas → `captureStream` + `MediaRecorder` | Safari WebM support varies. Feature-detect, offer MP4 if `isTypeSupported`, and otherwise disable the option with a tooltip. |
+| PNG / JPEG / WebP | SVG → Blob URL → `Image` → `canvas` at scale ≤ 4 → `toBlob` | **Clamp the scale to the browser's canvas-area limit.** Some browsers cap a canvas at ~16.7 M px, and 1376×790 at 4× is 17.4 M px. Show the effective scale in the menu. |
+| WebM motion | Step the trace animation deterministically (Web Animations API `currentTime`) → draw each frame to canvas → `captureStream` + `MediaRecorder` | Chromium supports WebM recording natively (D7: Chromium-only). |
 | Clipboard | `navigator.clipboard.write([ClipboardItem{'image/png'}])` | Inside a sandboxed embed iframe, fall back to download |
 
 ### 3.9 Website routes (`apps/web`)
@@ -260,7 +261,7 @@ Hobby has hard limits and no paid overage, so the deployment design is shaped ar
 | **Monthly quotas are hard caps**: about 100 GB Fast Data Transfer, about 1 M function invocations, 4 CPU-hours Active CPU, about 1 M edge requests | Exceeding a cap can pause the project until the next cycle; you cannot buy more on Hobby | **No public functions in v1**; static-first. Image Optimization is off (`images.unoptimized: true`, WebP generated at build time). The **Proof Lab shows static WebP thumbnails** and loads a live artifact iframe only on click (1 artifact per visit instead of 12). Page-weight budgets in §5. Personal traffic should stay far below these caps; the safeguards are cheap insurance against scraping or a link going viral. Check the Usage page weekly in the launch month and monthly after that; act at 50 % of any quota. |
 | **One concurrent build; deployments per day are capped** | A busy PR day could queue or block deploys | Builds run in GitHub Actions (`vercel build`), so Vercel only uploads. Docs-only changes don't deploy (`paths-ignore`). |
 | **Limited observability**: no log drains, short runtime-log retention, capped Web Analytics/Speed Insights data | Thin production telemetry | With almost no runtime code there is little to log. CI annotations carry build and size telemetry. Web Analytics and Speed Insights are used within the included quotas (§4.6). |
-| **Free GitHub Actions** (not Vercel, but part of the free-tier toolchain): unlimited minutes on standard runners for public repos; a monthly minute allowance for private repos on GitHub Free | A heavy CI suite on a private repo could use up the minutes | Lean CI: PRs run unit + golden + Chromium e2e; the full Chromium/WebKit/Firefox matrix runs on `main` and before tagging. Cache the pnpm store, the Playwright browsers and Turborepo. `concurrency` cancels superseded runs. |
+| **Free GitHub Actions** (not Vercel, but part of the free-tier toolchain): unlimited minutes on standard runners for public repos; a monthly minute allowance for private repos on GitHub Free | A heavy CI suite on a private repo could use up the minutes | Lean CI: unit + golden + Chromium-only e2e on every run. Cache the pnpm store, the Playwright browsers and Turborepo. `concurrency` cancels superseded runs. |
 
 **Rough capacity on 100 GB/month** (estimate; confirm with real page weights in P7). This is orders of magnitude above expected personal-use traffic:
 
@@ -357,7 +358,7 @@ The sketches that used to be here are now real files; read those rather than a c
 | --- | --- |
 | [`apps/web/next.config.ts`](apps/web/next.config.ts) | Security headers on every page; `X-Frame-Options: SAMEORIGIN` on site pages; on artifacts, a strict CSP built from the viewer's inline-script hashes (`default-src 'none'; script-src 'sha256-…' …; frame-ancestors *`, read from `.generated/gallery.json`); `.html` → extension-less 308 redirects; `images.unoptimized`; monorepo tracing root |
 | [`apps/web/vercel.json`](apps/web/vercel.json) | `framework: nextjs`, `pnpm install --frozen-lockfile`, `pnpm run build`, `git.deploymentEnabled: false` |
-| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Gates (§5): engines check, viewer template freshness, engine doctor, engine render/parity/contract tests, site build, typecheck, Playwright (Chromium on PRs, full matrix on `main`) |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Gates (§5): engines check, viewer template freshness, engine doctor, engine render/parity/contract tests, site build, typecheck, Playwright (Chromium only, D7) |
 | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | `vercel pull` → `vercel build` → `vercel deploy --prebuilt`. PR → preview. Production runs **only after CI passed on `main`** (`workflow_run`) as a **staged** deployment (`--prod --skip-domain`), followed by `pnpm smoke`, then `vercel promote`. `workflow_dispatch(ref)` redeploys an older ref. |
 | [`scripts/smoke.mjs`](scripts/smoke.mjs) | Post-deploy checks: pages, headers, artifact CSP, redirect, sitemap, IR JSON |
 
@@ -412,11 +413,11 @@ tag v1.x.y ───────────► SKILL.md release · (optional) p
 | Layout/route | Vitest property tests (random graphs → no overlaps, no edge-through-node, determinism) | Two consecutive renders of the same IR are byte-identical |
 | SVG snapshots | Vitest snapshot per gallery source | A snapshot change requires an explicit update in the PR |
 | **Golden visual** | Playwright screenshots of re-created designs × {dark, light} vs `design/*.svg` rendered PNGs; `pixelmatch` | ≤ 0.5 % differing pixels per image (tune in Phase 1) |
-| Viewer e2e | Playwright: every shortcut (`R L / M ? E T S 0 + − Esc`), deep links, passport drag, journey, reduced motion | Green on Chromium for every PR; green on Chromium, WebKit and Firefox on `main` and before every tag (saves Actions minutes, §4.0) |
+| Viewer e2e | Playwright: every shortcut (`R L / M ? E T S 0 + − Esc`), deep links, passport drag, journey, reduced motion | Green on Chromium for every PR and on `main` (Chromium-only support, D7) |
 | Accessibility | `@axe-core/playwright`, keyboard-only scripts, contrast check on tokens | 0 serious/critical violations; AA contrast in both themes |
 | Budgets | Page weights measured with Playwright on `next start` (§10) | Landing total ≤ 1 MB; gallery initial load ≤ 1.3 MB (static thumbnails); landing JS ≤ 140 KB gz (revised from 120 KB: the Next 16 / React 19 runtime alone is ≈ 130 KB gz). Artifact size follows ADR 0001 (≈ 824 KB raw / 207 KB gz, an accepted F6 deviation). |
 | Site performance | Lighthouse CI on the preview URL | Performance ≥ 95, a11y = 100, SEO ≥ 95 |
-| Exports | Playwright download assertions (dimensions, MIME, 4× clamp) | Matrix green; known Safari gaps documented |
+| Exports | Playwright download assertions (dimensions, MIME, 4× clamp) | Green on Chromium |
 
 ---
 
@@ -435,7 +436,7 @@ tag v1.x.y ───────────► SKILL.md release · (optional) p
 | **P2 Workflow + Dataflow** | 2 | Lanes, phases, groups, exception lane, `mainPath`; stages, two-line labels, outer back-edges | `agent-tool-call-workflow` and `order-event-stream-topology` pass the golden diff; shipped to production |
 | **P3 Sequence, Lifecycle, ERD** | 3 | Lifelines/activations/segments; `main-path-v3`, terminal and initial markers; domain bands, column ports, crow's-foot | `cache-miss-request-sequence`, `deployment-release-lifecycle` and `order-management-schema` pass the golden diff; shipped to production |
 | **P4b Viewer complete** | 2.5 | Route + journey, lens, radar, guide, panel, presentation/embed modes | e2e + axe gates green on all six types; viewer budget met |
-| **P5 Export** | 1.5 | SVG, PNG/JPEG/WebP (4× with clamp), WebM, clipboard | Export matrix green on Chromium/WebKit/Firefox |
+| **P5 Export** | 1.5 | SVG, PNG/JPEG/WebP (4× with clamp), WebM, clipboard | Export tests green on Chromium |
 | **P6 Website** | 2.5 | Landing, Start wizard, Gallery + Proof Lab (static thumbnails), Guide (MDX), Community, Playground (English only), vc-archify branding and attribution, SEO (sitemap, OG) | Every sitemap route renders; Lighthouse gates; English copy reviewed |
 | **P7 Hardening & v1** | 1 | CSP hashes, WAF rate-limit rule, page-weight and quota review against §4.0, one-page runbook, rollback drill, `SKILL.md` for the agents you use, optional npm publish | Go-live checklist (§7) signed off |
 | **Post-v1** | — | Backlog in §8 | Each item is decided separately |
@@ -481,7 +482,6 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | Class, Tree, Timeline, Waterfall types | Designs | Same pipeline: new IR extension + layout engine + golden baselines |
 | Artifact size reduction (ADR 0001, F6) | — | Minify the inlined viewer JS/CSS in `packages/viewer/scripts/generate-viewer.mjs` and drop unused locales from the i18n island; keep the design-parity and e2e tests green |
 | Automated axe + Lighthouse gates | — | Add `@axe-core/playwright` to the e2e suite and Lighthouse CI on the preview URL (Plan §5); today a11y is covered by role/name/heading assertions only |
-| Playground byte-identity beyond Chromium | Firefox/WebKit in CI (`main` matrix) | Verify the browser engine's output equals the Node render outside Chromium; text segmentation can differ for exotic scripts |
 | Make the browser-check gate blocking | One green run on Linux runners | Remove `continue-on-error` from the `ci.yml` step |
 
 ---
@@ -494,12 +494,11 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | --- | --- | --- |
 | Orthogonal routing quality (crossovers, label collisions) is the hardest part | Visual parity slips | Start with architecture in P1 (densest routing); use authored `via` points as an escape hatch; the quality gate catches regressions |
 | Pixel parity depends on font rasterisation differences between OSes | Flaky golden tests | Run golden tests only in the CI Linux container with pinned Chromium; compare against PNGs rendered in that same container |
-| Safari canvas, WebM and clipboard limits | Export gaps | Feature detection, clamped scale, documented fallbacks (§3.8) |
 | Artifact size creep (fonts ≈ 88 KB base64 + viewer + SVG) | Slow email/PR sharing | `size-limit` budgets; subset fonts to the glyphs actually used (keep the vietnamese subset when needed) |
 | Next.js / Vercel config details change between versions | Build breaks on upgrade | Pin versions; Renovate PRs go through preview + the full gate suite |
 | Vercel's install step doesn't honour pnpm 12 | Builds fail at install | **Avoided in v1**: builds run in CI (`vercel build`); Corepack is needed only if Git-integration builds are re-enabled (§4.1.1) |
 | Hobby quota exhausted (scraping, a link going viral) | Project paused until the next cycle; site down | Unlikely at personal-use traffic. Static-only v1, static Proof Lab thumbnails, page-weight budgets, rate-limit rule, periodic usage review (§4.0) |
-| GitHub Actions minutes run out (private repo) | CI and deploys stop until the next month | Lean CI (§4.0): full browser matrix only on `main` and before tags; caching; cancel superseded runs. A public repo removes the limit. |
+| GitHub Actions minutes run out (private repo) | CI and deploys stop until the next month | Lean CI (§4.0): Chromium-only e2e; caching; cancel superseded runs. A public repo removes the limit. |
 | Use drifts beyond personal (commercial, or a second operator) | Hobby terms no longer fit | Revisit before it happens; moving to Pro is a settings change (§4.0, §8) |
 
 ### Decisions recorded (2026-10-17)
@@ -512,6 +511,7 @@ Nothing here is planned for v1. Each item needs its own go/no-go decision.
 | D4 | Product name | **vc-archify** | See the branding rules below |
 | D5 | Vercel plan | **Hobby (free), permanently.** vc-archify is a **personal, non-commercial** project (confirmed 2026-10-17), built and operated by one developer. v1 is static-only and deployed from CI. | §0, §1, §4.0–§4.6, §5, §6, §7, §8 |
 | D6 | Build vs fork | **2-day spike in P0** against the criteria below. **Outcome (2026-10-17): fork.** F1–F5 and F7 pass, F2 with exact viewBox/node/edge parity on all 7 references. F6 (size) is a documented deviation: 824 KB raw / 207 KB gzip per artifact, still within the Hobby budget. See [ADR 0001](docs/adr/0001-build-vs-fork.md). | §0, §3.3, §6, below |
+| D7 | Supported browsers | **Chromium-based only** (Chrome, Edge, Brave, Opera, Arc), decided 2026-10-18. The e2e suite and CI test Chromium only; the site's `browserslist` targets Chromium; cross-browser workarounds were removed. | §1, §5, README, Guide |
 
 **Branding rules (D4):**
 

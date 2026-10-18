@@ -184,6 +184,7 @@ function parseInput(ir) {
     return { ok: true, value: JSON.parse(ir) };
   } catch (error) {
     const message = `Input JSON could not be parsed: ${error.message}`;
+    // Chromium's V8 reports the failing offset as "position N".
     const position = /position (\d+)/.exec(error.message);
     const where = position ? lineColumn(ir, Number(position[1])) : {};
     return {

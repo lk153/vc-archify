@@ -51,21 +51,17 @@ jobs:
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') ||
       github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04 (Playwright deps support lags)
     timeout-minutes: 30
     environment: ${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
 
-      - uses: pnpm/action-setup@v4
-      - name: Cache pnpm store
-        uses: actions/cache@v4
+      - uses: pnpm/action-setup@v6
         with:
-          path: ~/.local/share/pnpm/store
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
+          cache: true   # caches the pnpm store, keyed on pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:engines
 

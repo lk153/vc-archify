@@ -266,7 +266,7 @@ export default function HomePage() {
           <div className="section-head">
             <p className="eyebrow">Output</p>
             <h2 id="output-title">One file. Everything inside.</h2>
-            <p>Every diagram is a single HTML file with inline SVG, the viewer and its fonts. Open it in any browser, even offline.</p>
+            <p>Every diagram is a single HTML file with inline SVG, the viewer and its fonts. Open it in Chrome or any Chromium-based browser, even offline.</p>
           </div>
           <div className={styles.outputLayout}>
             <div className={styles.outputMain}>
@@ -414,7 +414,7 @@ export default function HomePage() {
             <li>
               <span className={styles.step}>4</span>
               <h3>You open it and share it</h3>
-              <p>Explore it in any browser, export images or attach the file to an email or a PR. Refine it by asking in chat.</p>
+              <p>Explore it in a Chromium-based browser, export images or attach the file to an email or a PR. Refine it by asking in chat.</p>
             </li>
           </ol>
         </div>

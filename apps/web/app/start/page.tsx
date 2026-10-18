@@ -151,7 +151,7 @@ export default function StartPage() {
               a real-browser check. If a gate fails, the agent repairs the JSON and runs it again, within a fixed repair limit.
             </li>
             <li>
-              <strong>You get one HTML file.</strong> Open it in any browser, explore it, export images, or ask for changes in plain
+              <strong>You get one HTML file.</strong> Open it in a Chromium-based browser, explore it, export images, or ask for changes in plain
               words: “move auth to the left”, “add the retry path”.
             </li>
           </ol>

@@ -22,7 +22,9 @@ node skills/vc-archify/bin/vc-archify.mjs render   architecture candidate.json d
 node skills/vc-archify/bin/vc-archify.mjs check    diagram.html --json
 ```
 
-The output is one HTML file. Open it in a browser or attach it to an email or PR. It makes **no network requests**.
+The output is one HTML file. Open it in a Chromium-based browser or attach it to an email or PR. It makes **no network requests**.
+
+**Supported browsers:** Chromium-based only (Chrome, Edge, Brave, Opera, Arc). The site, playground and artifacts are built and tested for Chromium; other browsers are not supported.
 
 ## Repository layout
 
@@ -47,7 +49,7 @@ pnpm install                    # also downloads the pinned Node 24 runtime
 pnpm dev                        # browser engine + gallery + next dev  (http://localhost:3000)
 pnpm --filter @vca/render test  # engine: every gallery IR renders + passes checks, design parity, CSP, escaping
 pnpm --filter @vca/web build    # production build (renders all artifacts, fails on any invalid IR)
-pnpm --filter @vca/web e2e      # Playwright against `next start` (local Google Chrome; CI uses bundled Chromium)
+pnpm --filter @vca/web e2e      # Playwright (Chromium only) against `next start`: local Google Chrome, bundled Chromium in CI
 pnpm --filter @vca/web thumbnails  # regenerate gallery thumbnails after changing gallery IR
 pnpm viewer:build               # regenerate the viewer template after editing packages/viewer/src
 pnpm check:engines              # Node pins agree (devEngines.runtime ↔ engines.node)
@@ -65,7 +67,7 @@ Run scripts through `pnpm` (or `node_modules/.bin/node`) so they use the pinned 
 
 ```bash
 git clone https://github.com/tt-a1i/archify /tmp/archify
-node scripts/sync-upstream.mjs /tmp/archify && pnpm viewer:build
+node scripts/sync-upstream.mjs /tmp/archify   # re-vendors, rebrands, patches and regenerates the viewer template
 pnpm --filter @vca/render test
 ```
 

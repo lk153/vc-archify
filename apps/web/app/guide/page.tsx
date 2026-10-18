@@ -495,6 +495,10 @@ export default function GuidePage() {
               <strong>No hosted generation.</strong> Your descriptions and code stay between you and your own agent. The{' '}
               <Link href="/playground">playground</Link> renders in your browser.
             </li>
+            <li>
+              <strong>Supported browsers: Chromium-based only</strong> (Chrome, Edge, Brave, Opera, Arc). The site, the playground and
+              the artifacts are built and tested for Chromium; other browsers are not supported.
+            </li>
             <li>This site loads no third-party scripts, fonts or CDNs. If the owner turns on Vercel Web Analytics, a cookie-less first-party script from <code>/_vercel/insights</code> runs on site pages, never inside artifacts. Your theme choice is kept in local storage on your device.</li>
           </ul>
         </section>

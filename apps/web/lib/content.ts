@@ -266,7 +266,7 @@ export const DEEP_LINKS: DeepLink[] = [
   { syntax: '#route=<from>~<to>', meaning: 'Show the traced route between two nodes', example: '#route=user~external' },
   { syntax: '#lens=<kind>', meaning: 'Open the semantic lens on a kind', example: '#lens=security' },
   { syntax: '?present=1', meaning: 'Open in the presentation stage', example: '?present=1' },
-  { syntax: '?embed=1&theme=dark|light', meaning: 'Chrome-free embed with a forced theme', example: '?embed=1&theme=light' },
+  { syntax: '?embed=1&theme=dark|light', meaning: 'Embed without the viewer controls, with a forced theme', example: '?embed=1&theme=light' },
 ];
 
 export const EXPORT_FORMATS: { format: string; detail: string }[] = [

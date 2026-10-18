@@ -32,5 +32,10 @@
     "@vca/browser-engine": "workspace:*",
     "@vca/render": "workspace:*",
     "typescript": "5.9.3"
-  }
+  },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 ChromeAndroid versions",
+    "last 2 Edge versions"
+  ]
 }

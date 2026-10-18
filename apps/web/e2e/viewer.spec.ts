@@ -13,6 +13,16 @@ async function open(page: Page, url: string) {
   });
   await page.goto(url);
   await expect(page.locator('svg[role="img"]').first()).toBeVisible();
+  // Wait for the viewer's own readiness signal (fonts loaded, layout settled)
+  // so interactions don't race its startup on slower browsers/runners.
+  await page.evaluate(async () => {
+    const viewer = (window as unknown as { Archify?: { waitForStableLayout?: () => Promise<unknown> } }).Archify;
+    try {
+      await viewer?.waitForStableLayout?.();
+    } catch {
+      /* layout never fully settled (e.g. motion); interactions still work */
+    }
+  });
   return errors;
 }
 

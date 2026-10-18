@@ -69,7 +69,7 @@ export default function CommunityPage() {
           <ul className={styles.list}>
             <li>
               <strong>Send the file.</strong> A diagram is one self-contained HTML file. Attach it to an email, a chat message or a PR;
-              the recipient opens it in any browser, offline.
+              the recipient opens it in Chrome or another Chromium-based browser, offline.
             </li>
             <li>
               <strong>Link to a view.</strong> Focus, route and lens state live in the URL fragment, so <code>diagram.html#route=user~api</code>{' '}

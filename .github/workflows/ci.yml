@@ -1,5 +1,5 @@
-# Quality gates (Plan §5). Pull requests run the lean set (Chromium only) to
-# stay inside free GitHub Actions minutes; main runs the full browser matrix.
+# Quality gates (Plan §5). vc-archify supports Chromium-based browsers only,
+# so every run tests Chromium.
 name: CI
 
 on:
@@ -16,26 +16,20 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04 (Playwright deps support lags)
     timeout-minutes: 40
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      E2E_FULL_MATRIX: ${{ github.event_name == 'push' && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # pnpm version comes from package.json#packageManager; Node 24 comes from
       # devEngines.runtime (pnpm downloads it), so there is no setup-node step.
-      - uses: pnpm/action-setup@v4
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
+      - uses: pnpm/action-setup@v6
         with:
-          path: ~/.local/share/pnpm/store
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
+          cache: true   # caches the pnpm store, keyed on pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:engines
@@ -58,21 +52,16 @@ jobs:
         run: pnpm browser-check
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-      - name: Install Playwright browsers
-        run: |
-          if [ "$E2E_FULL_MATRIX" = "1" ]; then
-            pnpm --filter @vca/web exec playwright install --with-deps chromium firefox webkit
-          else
-            pnpm --filter @vca/web exec playwright install --with-deps chromium
-          fi
+      - name: Install Playwright Chromium
+        run: pnpm --filter @vca/web exec playwright install --with-deps chromium
       - name: End-to-end tests
         run: pnpm --filter @vca/web e2e
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report

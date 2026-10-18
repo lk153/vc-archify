@@ -29,9 +29,6 @@ function trackErrors(page: Page) {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
-    // /playground is built separately; until it exists, Next's link prefetch
-    // for it logs a 404 that is not an error of these pages.
-    if (msg.location().url.includes('/playground')) return;
     errors.push(`${msg.text()} @ ${msg.location().url}`);
   });
   page.on('pageerror', (error) => errors.push(String(error)));
