@@ -80,7 +80,7 @@ GitHub Actions builds and deploys with the Vercel CLI. Vercel's own Git auto-dep
 One-time setup:
 
 1. **Vercel project settings:** Framework **Next.js**, **Root Directory `apps/web`**, and "Include files outside the root directory" **on**. Node.js version: 24.x is read from `engines.node`.
-2. **GitHub repository secrets:** `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`. Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` if your production domain isn't `vc-archify.vercel.app`.
+2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` if your production domain isn't `vc-archify.vercel.app`.
 3. **Vercel environment variables (optional):** `GITHUB_TOKEN` (raises the GitHub API limit for the star count), and `NEXT_PUBLIC_SITE_URL` if you use a custom domain (the default is `https://vc-archify.vercel.app`).
 
 Flow ([`.github/workflows/`](.github/workflows/)):

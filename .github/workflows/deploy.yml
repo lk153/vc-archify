@@ -8,7 +8,8 @@
 #   workflow_dispatch(ref)    → redeploy an older tag/commit to production (rollback beyond
 #                               the single step `vercel rollback` offers on Hobby)
 #
-# Required repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# Required: repository secret VERCEL_TOKEN, and VERCEL_ORG_ID + VERCEL_PROJECT_ID
+# (repository secrets or variables; values from `vercel link` → .vercel/project.json).
 # Optional: VERCEL_AUTOMATION_BYPASS_SECRET (smoke-test protected deployment URLs), TURBO_TOKEN;
 # repository variables PRODUCTION_HOST (default vc-archify.vercel.app) and TURBO_TEAM.
 name: Deploy
@@ -35,9 +36,11 @@ permissions:
   pull-requests: write
 
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  # The IDs are not sensitive, so they may be repository secrets or variables.
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID || vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID || vars.VERCEL_PROJECT_ID }}
   VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+  VERCEL_TOKEN_IS_A_VARIABLE: ${{ vars.VERCEL_TOKEN != '' }}
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -64,6 +67,21 @@ jobs:
           cache: true   # caches the pnpm store, keyed on pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:engines
+
+      - name: Check Vercel credentials
+        run: |
+          missing=""
+          [ -n "$VERCEL_TOKEN" ] || missing="$missing VERCEL_TOKEN"
+          [ -n "$VERCEL_ORG_ID" ] || missing="$missing VERCEL_ORG_ID"
+          [ -n "$VERCEL_PROJECT_ID" ] || missing="$missing VERCEL_PROJECT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing Vercel credentials::Not available to this job:$missing. Add them in GitHub → Settings → Secrets and variables → Actions → Repository secrets (exact names, upper case). Environment secrets only work if they are in the '${{ github.event_name == 'pull_request' && 'preview' || 'production' }}' environment."
+            if [ "$VERCEL_TOKEN_IS_A_VARIABLE" = "true" ]; then
+              echo "::error title=VERCEL_TOKEN is a variable::VERCEL_TOKEN is saved as an Actions *variable*. Delete it there and save it as a *secret*."
+            fi
+            exit 1
+          fi
+          echo "Vercel credentials present (token, org ID, project ID)."
 
       - name: Pull Vercel project settings
         run: |
