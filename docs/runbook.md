@@ -16,10 +16,9 @@ It checks the playground page and its security headers, the in-browser engine bu
 | Situation | Action |
 | --- | --- |
 | The latest production deploy is bad | Vercel dashboard → Deployments → the previous production deployment → **Instant Rollback**, or `pnpm exec vercel rollback <previous-deployment-url> --yes --token "$VERCEL_TOKEN"`. Hobby can only return to the **immediately previous** production deployment. |
-| You need an older release | GitHub → Actions → **Deploy** → *Run workflow* with the tag or commit SHA. It rebuilds that ref, smoke-tests it and promotes it. |
-| A production smoke test failed in CI | If it failed on the staged URL, the deployment was never promoted. If it failed on the production domain after promotion, `deploy.yml` already rolled back to the previous production deployment. Either way, production serves the previous release. Fix the cause and merge again. |
+| You need an older release | GitHub → Actions → **Deploy** → *Run workflow* with the tag or commit SHA. It rebuilds that ref and deploys it to production; then check it yourself with `pnpm smoke`. |
 
-After a rollback, Vercel stops auto-assigning the production domain to new deployments until you promote one again. The next successful `main` deploy calls `vercel promote`, which restores this.
+After a rollback, Vercel stops auto-assigning the production domain to new deployments until you promote one again. When the fix is deployed, open it in Vercel → Deployments and choose **Promote** once; later deploys go live automatically again.
 
 ## Fix a broken playground example
 

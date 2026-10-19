@@ -2,16 +2,16 @@
 # runs here with the pinned pnpm + Node 24, then the prebuilt output is uploaded.
 # Vercel's Git auto-deploys stay off (apps/web/vercel.json).
 #
-#   pull_request (same repo)  → preview deployment, URL in the job summary + PR comment
-#   CI succeeded on main      → staged production deployment → smoke test → promote →
-#                               smoke test the production domain (auto-rollback on failure)
+#   pull_request (same repo)  → preview deployment + smoke test, URL in the job summary + PR comment
+#   CI succeeded on main      → production deployment (no automated checks against production;
+#                               verify it yourself, e.g. `pnpm smoke <url>`, docs/runbook.md)
 #   workflow_dispatch(ref)    → redeploy an older tag/commit to production (rollback beyond
 #                               the single step `vercel rollback` offers on Hobby)
 #
 # Required: repository secret VERCEL_TOKEN, and VERCEL_ORG_ID + VERCEL_PROJECT_ID
 # (repository secrets or variables; values from `vercel link` → .vercel/project.json).
-# Optional: VERCEL_AUTOMATION_BYPASS_SECRET (smoke-test protected deployment URLs), TURBO_TOKEN;
-# repository variables PRODUCTION_HOST (production domain to smoke-test after promotion) and TURBO_TEAM.
+# Optional: VERCEL_AUTOMATION_BYPASS_SECRET (smoke-test protected preview URLs), TURBO_TOKEN;
+# repository variable TURBO_TEAM.
 name: Deploy
 
 on:
@@ -44,9 +44,6 @@ env:
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-  # Production domain to smoke-test after promotion (repository variable, e.g.
-  # vc-archify-<you>.vercel.app or a custom domain). Unset: that check is skipped.
-  PRODUCTION_HOST: ${{ vars.PRODUCTION_HOST }}
 
 jobs:
   deploy:
@@ -101,45 +98,23 @@ jobs:
       - name: Deploy prebuilt output
         id: deploy
         run: |
+          # Production goes live directly (`--prod` assigns the production domains).
+          # CI already ran every gate on this exact commit before this workflow started;
+          # nothing here tests the production deployment itself.
           if [ "$TARGET" = "production" ]; then
-            # Staged: production build without moving the domains yet.
-            URL=$(pnpm exec vercel deploy --prebuilt --prod --skip-domain --token="$VERCEL_TOKEN")
+            URL=$(pnpm exec vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
           else
             URL=$(pnpm exec vercel deploy --prebuilt --token="$VERCEL_TOKEN")
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Deployment: $URL" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Smoke test (deployment URL)
-        # Unique deployment URLs sit behind Vercel Deployment Protection; the smoke
-        # test reaches them through `vercel curl` (VERCEL_TOKEN) or the optional
+      - name: Smoke test (preview URL)
+        if: github.event_name == 'pull_request'
+        # Preview URLs sit behind Vercel Deployment Protection; the smoke test reaches
+        # them through `vercel curl` (VERCEL_TOKEN) or the optional
         # VERCEL_AUTOMATION_BYPASS_SECRET. If neither gets through, it skips (exit 0).
         run: pnpm smoke "${{ steps.deploy.outputs.url }}" --vercel-curl --allow-protected
-
-      - name: Promote to production
-        if: env.TARGET == 'production'
-        run: |
-          # Remember what production serves now, for an automatic rollback below.
-          PREV=""
-          [ -n "$PRODUCTION_HOST" ] && PREV=$(pnpm exec vercel inspect "$PRODUCTION_HOST" --json --token="$VERCEL_TOKEN" 2>/dev/null \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(j.id||j.uid||"")}catch{console.log("")}})' || true)
-          echo "PREV_DEPLOYMENT=$PREV" >> "$GITHUB_ENV"
-          pnpm exec vercel promote "${{ steps.deploy.outputs.url }}" --yes --token="$VERCEL_TOKEN"
-
-      - name: Smoke test (production domain)
-        if: env.TARGET == 'production'
-        run: |
-          if [ -z "$PRODUCTION_HOST" ]; then
-            echo "::notice title=Production smoke test skipped::Set the repository variable PRODUCTION_HOST (your production domain, shown in Vercel → Project → Domains) to smoke-test it after each promotion."
-            exit 0
-          fi
-          if ! pnpm smoke "https://$PRODUCTION_HOST"; then
-            if [ -n "$PREV_DEPLOYMENT" ]; then
-              echo "Smoke test failed: rolling back to $PREV_DEPLOYMENT"
-              pnpm exec vercel rollback "$PREV_DEPLOYMENT" --yes --token="$VERCEL_TOKEN"
-            fi
-            exit 1
-          fi
 
       - name: Comment preview URL on the PR
         if: github.event_name == 'pull_request'

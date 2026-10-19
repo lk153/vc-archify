@@ -122,7 +122,7 @@ vc-archify/
 ├─ design/                   # reference designs = golden baselines (read-only)
 ├─ scripts/                  # sync-upstream.mjs · smoke.mjs · check-engines.mjs
 ├─ docs/                     # adr/0001-build-vs-fork.md · runbook.md
-├─ .github/workflows/        # ci.yml (gates) · deploy.yml (vercel pull → build → deploy --prebuilt → smoke → promote)
+├─ .github/workflows/        # ci.yml (gates) · deploy.yml (vercel pull → build → deploy --prebuilt [--prod]; smoke on PR previews only)
 ├─ package.json              # packageManager pnpm@12.3.4 · engines.node 24.x · devEngines.runtime node 24.22.0 (§4.1.1)
 ├─ pnpm-lock.yaml            # also pins the Node 24 runtime binaries (per-platform URL + sha256)
 ├─ turbo.json · pnpm-workspace.yaml · UPSTREAM.json · LICENSE · NOTICE
@@ -249,7 +249,7 @@ Hobby has hard limits and no paid overage, so the deployment design is shaped ar
 | --- | --- | --- |
 | **Personal, non-commercial use only** | ✅ **Fits: confirmed personal use.** | Keep it that way: no ads, paid features, sponsor-gated features or client work. Commercial use would require Pro (§8). |
 | **Single-owner account**: no team members. You cannot deploy from a **private** repo owned by a GitHub organisation, and for private repos only commits authored by the owner deploy. | ✅ **Fits a solo personal project**: the owner is the only operator and the only commit author | The repo lives under the owner's **personal GitHub account**, not an org; public or private both deploy on Hobby (see "Still open" in §9). **Deploys run from GitHub Actions** with the owner's `VERCEL_TOKEN` (`vercel pull` → `vercel build` → `vercel deploy --prebuilt`), and Git-integration auto-deploys are off. CI deploys are chosen for an **exact toolchain** (pnpm 12.3.4 + Node 24, §4.1.1) and **gates before deploy**. |
-| **No Rolling Releases** (Pro/Enterprise only) | No canary of 10 % → 50 % → 100 % | Gate before production instead: full e2e on the CI build, smoke test on the preview URL, then a production deploy and a post-deploy smoke test (§4.5) |
+| **No Rolling Releases** (Pro/Enterprise only) | No canary of 10 % → 50 % → 100 % | Gate before production instead: full e2e on the CI build and a smoke test on PR preview URLs; production itself is checked manually by the owner (§4.5) |
 | **Instant Rollback only to the immediately previous production deployment** | You cannot jump back several releases in one click | Every production deploy is tagged. One-step rollback uses `vercel rollback`; anything older re-runs `deploy.yml` on an earlier tag (`workflow_dispatch`). |
 | **No Skew Protection** (a Pro/Enterprise feature per Vercel docs; verify in P0) | A browser tab open across a deploy can request a JS chunk that no longer exists | Artifacts are self-contained and unaffected. The site adds a global chunk-load-error handler that forces one full reload. Pages are static, so the impact is low. |
 | **Limited WAF**: few custom rules and roughly one rate-limit rule per project | You cannot protect many paths separately | With no public API, the single rate-limit rule protects the heaviest objects: `/gallery/artifacts/*` (e.g. 300 req/min/IP, against scraping and hot-linking that would drain the transfer quota) |
@@ -354,13 +354,13 @@ The sketches that used to be here are now real files; read those rather than a c
 | [`apps/web/next.config.ts`](apps/web/next.config.ts) | Security headers on every page; `X-Frame-Options: SAMEORIGIN` on site pages; on artifacts, a strict CSP built from the viewer's inline-script hashes (`default-src 'none'; script-src 'sha256-…' …; frame-ancestors *`, read from `.generated/gallery.json`); `.html` → extension-less 308 redirects; `images.unoptimized`; monorepo tracing root |
 | [`apps/web/vercel.json`](apps/web/vercel.json) | `framework: nextjs`, `pnpm install --frozen-lockfile`, `pnpm run build`, `git.deploymentEnabled: false` |
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Gates (§5): engines check, viewer template freshness, engine doctor, engine render/parity/contract tests, site build, typecheck, Playwright (Chromium only, D7) |
-| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | `vercel pull` → `vercel build` → `vercel deploy --prebuilt`. PR → preview. Production runs **only after CI passed on `main`** (`workflow_run`) as a **staged** deployment (`--prod --skip-domain`), followed by `pnpm smoke`, then `vercel promote`. `workflow_dispatch(ref)` redeploys an older ref. |
-| [`scripts/smoke.mjs`](scripts/smoke.mjs) | Post-deploy checks: pages, headers, artifact CSP, redirect, sitemap, IR JSON |
+| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | `vercel pull` → `vercel build` → `vercel deploy --prebuilt`. PR → preview + `pnpm smoke` on the preview URL. Production runs **only after CI passed on `main`** (`workflow_run`) with `--prod`; no automated checks run against production (the owner verifies it). `workflow_dispatch(ref)` redeploys an older ref. |
+| [`scripts/smoke.mjs`](scripts/smoke.mjs) | Deployment checks (page, headers, engine bundle, example IR, redirects). CI runs it on PR previews; production is checked manually by the owner |
 
 Changes from the earlier sketch:
 
 - There is **no `turbo-ignore` step**. Gallery IR and the engine live outside the `@vca/web` package graph, so `turbo-ignore` could wrongly skip a deploy. Docs-only changes are skipped with `paths-ignore` instead, and Hobby's deployment cap is ample for one developer.
-- **Staged-then-promote** replaces "deploy, then roll back on failure". A failed smoke test never reaches the production domain.
+- **Direct `--prod` deploys (2026-10-18).** The earlier staged-then-promote flow failed: `vercel promote` with the project-scoped CI token returned "User not found (404)". Production now deploys with `vercel deploy --prebuilt --prod`, gated by the full CI run on the same commit. Since 2026-10-18 no automated checks run against production; the owner verifies it and uses Instant Rollback if needed.
 
 ### 4.4 Security
 
@@ -380,9 +380,8 @@ Changes from the earlier sketch:
 feature branch ──PR──► ci.yml: lint · typecheck · unit · golden-diff · budgets · Playwright e2e + axe (next start)
                   └──► deploy.yml: vercel build → deploy --prebuilt (Preview URL)
                          └──► smoke test + Lighthouse CI on the preview URL · URL commented on the PR
-main (merge) ─────────► ci.yml passes ──workflow_run──► deploy.yml: vercel build --prod → deploy --prebuilt --prod --skip-domain (staged)
-                         └──► smoke test on the staged URL ──pass──► vercel promote (100 % at once; no rolling release on Hobby)
-                                                            └─fail──► not promoted; production keeps the previous release
+main (merge) ─────────► ci.yml passes ──workflow_run──► deploy.yml: vercel build --prod → deploy --prebuilt --prod (live; no rolling release on Hobby)
+                         └──► no automated production checks (2026-10-18, owner's decision): the owner verifies production manually
 tag v1.x.y ───────────► SKILL.md release · (optional) publish the vc-archify CLI to npm
 ```
 
@@ -395,7 +394,7 @@ tag v1.x.y ───────────► SKILL.md release · (optional) p
 
 - **Vercel Web Analytics + Speed Insights** run on site pages only, within the quotas included in Hobby. They are **never injected into artifact HTML**, which keeps the zero-external-request guarantee (PRD §4.14).
 - **Usage dashboard** (Fast Data Transfer, edge requests, invocations) is reviewed by the owner weekly in the launch month and monthly after that. At 50 % of any quota we cut page weight or tighten the rate limit; at 70 % sustained we consider Pro (§4.0).
-- Runtime logs are minimal (ISR only) and Hobby has no log drains. Post-deploy smoke tests are the production health signal.
+- Runtime logs are minimal and Hobby has no log drains. Production is verified manually by the owner (`pnpm smoke <url>`); CI does not test production.
 - Build telemetry tracks artifact size per gallery item, render time per type, and quality-gate failures. These run as CI annotations so regressions are visible in the PR.
 
 ---
@@ -553,13 +552,13 @@ All of P0–P7 is implemented in this repository. Production deployment is left 
 | P4 Viewer | Vendored viewer (`packages/viewer/src`), regenerated into the skill template (`pnpm viewer:check`) | `e2e/viewer.spec.ts`: zero network requests, passport, route + journey, finder/guide/theme shortcuts, legend → lens mapping, presentation/embed, ERD keys, redirect, CSP |
 | P5 Export | Upstream export menu (PNG/JPEG/WebP up to 4×, SVG auto/light/dark, WebM, clipboard) | e2e downloads a dual-theme SVG and a valid PNG |
 | P6 Website | **Single page (D8):** Next.js 16.4.2, fully static. `/` is the playground (in-browser engine in a Web Worker, sandboxed preview); `/examples/*.json`; old multi-page URLs 308 to `/` | `e2e/app.spec.ts`, `e2e/playground.spec.ts` (output **byte-identical** to the Node render for all 12 examples), `e2e/viewer.spec.ts` (downloaded HTML: shortcuts, deep links, export, modes); **20/20** (Chromium) |
-| P7 Hardening | Security headers, redirects from the former multi-page URLs, chunk-reload guard (no Skew Protection on Hobby), opt-in Vercel Analytics, `ci.yml`, `deploy.yml` (CLI prebuilt; staged → smoke → promote → smoke production → auto-rollback), `scripts/smoke.mjs`, `docs/runbook.md`, LICENSE/NOTICE | `vercel build` verified locally (Build Output API, functions on `nodejs24.x`, CSP and redirects in `config.json`); `pnpm browser-check`: 8 pass, 4 known upstream deviations (baselined), 0 new |
+| P7 Hardening | Security headers, redirects from the former multi-page URLs, chunk-reload guard (no Skew Protection on Hobby), opt-in Vercel Analytics, `ci.yml`, `deploy.yml` (CLI prebuilt; PR preview + smoke; `--prod` deploy without production checks), `scripts/smoke.mjs`, `docs/runbook.md`, LICENSE/NOTICE | `vercel build` verified locally (Build Output API, functions on `nodejs24.x`, CSP and redirects in `config.json`); `pnpm browser-check`: 8 pass, 4 known upstream deviations (baselined), 0 new |
 
 **Measured page weight** (`next start`, gzip): landing 345 KB first load (603 KB fully scrolled); gallery ≈ 660 KB; start/guide/community 233–249 KB; landing JS 138 KB. Playground first render ≈ 410 KB extra, after which re-renders transfer nothing.
 
 **Owner actions before and at the first deploy:**
 1. Vercel project: **Root Directory `apps/web`**, "Include files outside the root directory" on, framework Next.js.
-2. GitHub: the secrets `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are already set. Optionally add `VERCEL_AUTOMATION_BYPASS_SECRET` and the variable `PRODUCTION_HOST` (if the domain isn't `vc-archify.vercel.app`).
+2. GitHub: the secrets `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` are already set. Optionally add `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected PR previews).
 3. Commit and push. CI runs, then `deploy.yml` deploys production after CI passes on `main`.
 4. After go-live: the WAF rate-limit rule, opt-in analytics, the rollback drill and skill-install checks (§7 🔲 items).
 

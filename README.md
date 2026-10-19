@@ -39,7 +39,7 @@ The output is one HTML file. Open it in a Chromium-based browser or attach it to
 | [`apps/web/`](apps/web/) | The web app (Next.js 16, fully static): one page, the playground at `/`, plus `/examples/*.json` |
 | [`examples/`](examples/) | IR for the playground's example picker (12 technical diagrams); every one is rendered and checked at build time |
 | [`design/`](design/) | Reference designs (6 types × dark/light) and the golden baselines for the parity tests |
-| [`scripts/`](scripts/) | `sync-upstream.mjs` (re-vendor + rebrand), `smoke.mjs` (post-deploy checks), `browser-check-examples.mjs`, `check-engines.mjs` |
+| [`scripts/`](scripts/) | `sync-upstream.mjs` (re-vendor + rebrand), `smoke.mjs` (deployment checks: run by CI on PR previews, by you on production), `browser-check-examples.mjs`, `check-engines.mjs` |
 | [`Plan.MD`](Plan.MD), [`PRD.MD`](PRD.MD), [`docs/adr/`](docs/adr/) | Plan, requirements and decisions |
 
 ## Develop
@@ -82,13 +82,13 @@ GitHub Actions builds and deploys with the Vercel CLI. Vercel's own Git auto-dep
 One-time setup:
 
 1. **Vercel project settings:** Framework **Next.js**, **Root Directory `apps/web`**, and "Include files outside the root directory" **on**. Node.js version: 24.x is read from `engines.node`.
-2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache). Set the repository **variable** `PRODUCTION_HOST` to your production domain (Vercel → Project → Domains) so each deploy also smoke-tests it after promotion, with auto-rollback on failure.
+2. **GitHub → Settings → Secrets and variables → Actions:** repository secret `VERCEL_TOKEN` (create it at vercel.com/account/tokens), plus `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` as secrets or variables. Get the IDs from `.vercel/project.json` after `pnpm exec vercel link`, or from the Vercel dashboard (Project → Settings → General → Project ID; your account's Settings → General → ID). Optional: `VERCEL_AUTOMATION_BYPASS_SECRET` (smoke-tests protected deployment URLs before promotion), `TURBO_TOKEN` + the `TURBO_TEAM` variable (remote cache).
 3. **Vercel environment variables (optional):** `NEXT_PUBLIC_SITE_URL` if you use a custom domain (the default is `https://vc-archify.vercel.app`), and `NEXT_PUBLIC_VERCEL_ANALYTICS=1` after enabling Web Analytics.
 
 Flow ([`.github/workflows/`](.github/workflows/)):
 
 - **Pull request** → `ci.yml` (gates) and `deploy.yml` (preview deployment + smoke test, with the URL commented on the PR).
-- **Push to `main`** → `ci.yml`. When it passes, `deploy.yml` builds a staged production deployment, smoke-tests it (`scripts/smoke.mjs`, reaching the protected deployment URL through `vercel curl`), promotes it, then smoke-tests the production domain if `PRODUCTION_HOST` is set. If that fails, it rolls back automatically to the previous production deployment.
+- **Push to `main`** → `ci.yml`. When it passes, `deploy.yml` deploys to production (`vercel deploy --prebuilt --prod`). No automated checks run against production; verify it yourself, e.g. `pnpm smoke https://<your-production-domain>`.
 - **Rollback** → Instant Rollback in the Vercel dashboard or `vercel rollback <previous-deployment-url>` (Hobby can only return to the previous production deployment), or run the **Deploy** workflow manually with an older tag/commit. See [docs/runbook.md](docs/runbook.md).
 
 Deploying by hand from your machine works the same way:
