@@ -33,7 +33,9 @@
   min-height: 0;
   padding: 12px 14px;
   background: var(--bg-elevated);
-  overflow: hidden;
+  /* Scrolls only when diagnostics + library controls leave the editor too little room. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .panel[hidden] {
@@ -138,6 +140,54 @@
   accent-color: var(--accent);
 }
 
+.newSelect {
+  width: auto;
+  min-height: 34px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.savedRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.nameField {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 4px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.nameInput {
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.danger:hover {
+  border-color: var(--kind-security);
+  color: var(--kind-security);
+}
+
+.libraryHint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
 .small {
   min-height: 34px;
   padding: 5px 14px;
@@ -206,8 +256,9 @@
 
 .diagnostics {
   display: grid;
+  flex: none;
   gap: 8px;
-  max-height: 34%;
+  max-height: 30vh;
   min-height: 0;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -326,7 +377,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 6px;
-  min-height: 160px;
+  min-height: 280px;
 }
 
 .editorHeader {
@@ -472,14 +523,34 @@
   position: absolute;
   bottom: 14px;
   left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 28px));
   margin: 0;
-  padding: 4px 10px;
-  border: 1px solid var(--kind-security);
+  padding: 6px 12px 6px 6px;
+  border: 1px solid color-mix(in srgb, var(--link) 70%, transparent);
   border-radius: 999px;
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--link) 12%, var(--bg-elevated));
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.25);
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
   pointer-events: none;
+}
+
+.staleIcon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--link);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 /* A slim tab on the left edge brings the panel back. */
@@ -546,4 +617,135 @@
     height: 80dvh;
     min-height: 420px;
   }
+}
+
+/* ----------------------------------------------------------------- sync -- */
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.badge {
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.badge[data-ok='true'] {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent);
+}
+
+.sync {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.sync > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.sync > summary::-webkit-details-marker {
+  display: none;
+}
+
+.sync > summary > span:first-child::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+
+.sync[open] > summary > span:first-child::before {
+  transform: rotate(90deg);
+}
+
+.syncSummary {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.syncSection {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.syncSection h3 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.syncForm {
+  display: grid;
+  gap: 8px;
+}
+
+.syncForm label:not(.check) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.syncForm input:not([type='checkbox']) {
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.syncFormRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.syncTarget {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.syncMessage {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }

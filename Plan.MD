@@ -228,6 +228,8 @@ Storage: viewer preferences use `localStorage` only inside `try/catch`, because 
 | --- | --- | --- |
 | `/` | **The playground, full screen:** the live preview (`srcdoc` sandbox iframe) fills the viewport; a resizable, collapsible configuration panel on the left holds the example picker (12 technical diagrams grouped by type), Render / Auto-render, preview theme (Match site / Dark / Light), engine diagnostics with JSON-pointer "Go to", the IR JSON editor and Download HTML / JSON. Below 900 px it stacks. | Static; rendering is 100 % client-side in a Web Worker |
 | `/examples/[file].json` | The IR the page loads when an example is picked (from repo-root `examples/`) | force-static route handler |
+| (browser) My diagrams | User diagrams created with **+ New…**, **Import JSON** or **Save to My diagrams**, autosaved in `localStorage` (`vca-diagrams-v1`) and listed first in the picker; Download JSON for backup | Client-side only; no server storage |
+| (browser) Sync | My diagrams ↔ a **folder on disk** (File System Access API: write-through on edit, two-way on connect/reload/"Sync now") and ↔ a **GitHub repository** (REST contents API with the owner's fine-grained token: Pull, Commit this/all, delete). Conflicts keep both versions. | Client-side only; the token is sent only to api.github.com |
 | `/engine/*` | The in-browser engine bundle (`packages/browser-engine` build output) | Static files |
 | `/playground`, `/gallery/*`, `/start`, `/guide`, `/community`, `/cases/*` | 308 redirect to `/` | Redirect |
 

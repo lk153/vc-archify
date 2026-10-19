@@ -6,7 +6,13 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { REPO_URL, SITE_NAME, UPSTREAM_URL } from '@/lib/site';
 import { preloadEngine, renderInBrowser, type DiagramType, type EngineDiagnostic, type RenderSuccess } from './engine';
 import { locatePointer, offsetOf } from './jsonLocate';
+import {
+  createDiagram, loadLibrary, savedIdOf, savedSource, sortedLibrary, storageAvailable, storeLibrary, titleOf, typeOf,
+  type SavedDiagram,
+} from './library';
 import { withPreviewTheme, type PreviewTheme, type ResolvedTheme } from './previewTheme';
+import { SyncPanel, syncBadges } from './SyncPanel';
+import { useDiagramSync } from './sync/useDiagramSync';
 import styles from './Playground.module.css';
 
 export interface PlaygroundExample {
@@ -136,10 +142,15 @@ export function Playground({ examples, defaultSource }: Props) {
   const [diagnostics, setDiagnostics] = useState<EngineDiagnostic[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [renderCount, setRenderCount] = useState(0);
+  const [library, setLibrary] = useState<SavedDiagram[]>([]);
+  const [libraryOk, setLibraryOk] = useState(true);
+  const [libraryNote, setLibraryNote] = useState('');
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestedRef = useRef<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const sourceRef = useRef<string | null>(null);
 
   const exampleBySource = useMemo(() => new Map(examples.map((e) => [e.source, e])), [examples]);
   // Group the picker by diagram type, in the order the examples arrive.
@@ -206,6 +217,47 @@ export function Playground({ examples, defaultSource }: Props) {
     }
   }, [exampleBySource, render]);
 
+  // ---- My diagrams (browser storage) ------------------------------------------
+  const updateLibrary = useCallback((update: (current: SavedDiagram[]) => SavedDiagram[]) => {
+    setLibrary((current) => {
+      const next = update(current);
+      if (!storeLibrary(next)) setLibraryNote('Could not save: browser storage is unavailable or full. Use Download JSON to keep your work.');
+      return next;
+    });
+  }, []);
+
+  const openSaved = useCallback((id: string, list?: SavedDiagram[]) => {
+    const entry = (list ?? library).find((d) => d.id === id);
+    if (!entry) return;
+    abortRef.current?.abort();
+    setText(entry.text);
+    setSource(savedSource(entry.id));
+    setEdited(false);
+    setReady(true);
+    setExampleQuery(null);
+    setLibraryNote('');
+    void render(entry.text);
+  }, [library, render]);
+
+  const addToLibrary = useCallback((entries: SavedDiagram[]) => {
+    updateLibrary((current) => [...entries, ...current]);
+  }, [updateLibrary]);
+
+  // Folder and GitHub sync. When a pull replaces the open diagram, reload the editor.
+  const sync = useDiagramSync({
+    library,
+    updateLibrary,
+    onExternalChange: (ids, next) => {
+      const openId = savedIdOf(sourceRef.current);
+      const entry = openId && ids.includes(openId) ? next.find((d) => d.id === openId) : undefined;
+      if (entry) {
+        setText(entry.text);
+        void render(entry.text);
+        setLibraryNote(`“${entry.name}” was updated from sync.`);
+      }
+    },
+  });
+
   // First load: ?example=<source> wins, then the saved draft, then the default example.
   useEffect(() => {
     const stored = readStored();
@@ -213,6 +265,11 @@ export function Playground({ examples, defaultSource }: Props) {
     if (stored.previewTheme && THEMES.some((t) => t.value === stored.previewTheme)) setPreviewTheme(stored.previewTheme);
     if (typeof stored.panelWidth === 'number') setPanelWidth(clampPanel(stored.panelWidth));
     if (typeof stored.panelOpen === 'boolean') setPanelOpen(stored.panelOpen);
+    const ok = storageAvailable();
+    const saved = ok ? loadLibrary() : [];
+    setLibraryOk(ok);
+    setLibrary(saved);
+    const storedSavedId = savedIdOf(stored.source ?? null);
     let requested: string | null = null;
     try {
       requested = new URLSearchParams(window.location.search).get('example');
@@ -221,6 +278,8 @@ export function Playground({ examples, defaultSource }: Props) {
     }
     if (requested && exampleBySource.has(requested)) {
       void loadExample(requested, { updateUrl: false });
+    } else if (storedSavedId && saved.some((d) => d.id === storedSavedId)) {
+      openSaved(storedSavedId, saved);
     } else if (typeof stored.text === 'string' && stored.text.trim()) {
       const storedSource = stored.source && exampleBySource.has(stored.source) ? stored.source : null;
       setText(stored.text);
@@ -244,12 +303,32 @@ export function Playground({ examples, defaultSource }: Props) {
     return () => window.clearTimeout(timer);
   }, [text, ready, autoRender, render]);
 
-  // Remember the draft and preferences.
+  // Remember the draft and preferences (immediately when the selected diagram
+  // changes, so a reload reopens it; debounced while typing).
+  const storedSourceRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!ready) return undefined;
-    const timer = window.setTimeout(() => writeStored({ text, source, edited, autoRender, previewTheme, panelWidth, panelOpen }), 400);
+    const save = () => writeStored({ text, source, edited, autoRender, previewTheme, panelWidth, panelOpen });
+    if (storedSourceRef.current !== source) {
+      storedSourceRef.current = source;
+      save();
+      return undefined;
+    }
+    const timer = window.setTimeout(save, 400);
     return () => window.clearTimeout(timer);
   }, [text, source, edited, autoRender, previewTheme, panelWidth, panelOpen, ready]);
+
+  // A diagram from "My diagrams" saves itself as you edit.
+  const savedId = savedIdOf(source);
+  useEffect(() => {
+    if (!ready || !savedId) return undefined;
+    const timer = window.setTimeout(() => {
+      updateLibrary((current) => current.map((d) => (d.id === savedId && d.text !== text
+        ? { ...d, text, type: typeOf(text) ?? d.type, updatedAt: Date.now() }
+        : d)));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [text, savedId, ready, updateLibrary]);
 
   // Drag the divider to resize the configuration panel (pointer) or use the arrow keys.
   const startResize = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -300,17 +379,102 @@ export function Playground({ examples, defaultSource }: Props) {
   const srcDoc = useMemo(() => (rendered ? withPreviewTheme(rendered.html, effectiveTheme) : ''), [rendered, effectiveTheme]);
   const stale = Boolean(rendered && rendered.text !== text);
   const currentExample = source ? exampleBySource.get(source) : undefined;
+  sourceRef.current = source;
+  const currentSaved = savedId ? library.find((d) => d.id === savedId) : undefined;
+  const sortedSaved = useMemo(() => sortedLibrary(library), [library]);
+  const typeLabelOf = (type: string | null) => examples.find((e) => e.type === type)?.typeLabel ?? type ?? 'Diagram';
 
   const onEdit = (value: string) => {
     setText(value);
-    if (!edited) {
+    if (!edited && !savedId) {
       setEdited(true);
       setExampleQuery(null);
     }
   };
 
   const onPickExample = (next: string) => {
-    if (next) void loadExample(next);
+    const id = savedIdOf(next);
+    if (id) openSaved(id);
+    else if (next) void loadExample(next);
+  };
+
+  const saveAsMine = () => {
+    const entry = createDiagram(titleOf(text) ?? currentExample?.title ?? 'Untitled diagram', text);
+    addToLibrary([entry]);
+    setSource(savedSource(entry.id));
+    setEdited(false);
+    setExampleQuery(null);
+    setLibraryNote(`Saved “${entry.name}” to My diagrams in this browser.`);
+  };
+
+  const createNew = async (type: string) => {
+    const template = examples.find((e) => e.type === type);
+    if (!template) return;
+    setStatus({ state: 'loading', message: `Creating a new ${template.typeLabel} diagram…` });
+    try {
+      const response = await fetch(`/examples/${encodeURIComponent(template.source)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const ir = await response.json();
+      const name = `Untitled ${template.typeLabel.toLowerCase()} diagram`;
+      ir.meta = { ...(ir.meta ?? {}), title: name };
+      const entry = createDiagram(name, `${JSON.stringify(ir, null, 2)}\n`);
+      addToLibrary([entry]);
+      openSaved(entry.id, [entry]);
+      setLibraryNote(`Created “${name}” from the ${template.title} example. Edit the JSON; it saves as you type.`);
+    } catch (error) {
+      setDiagnostics([{ code: 'playground/new', severity: 'error', message: `Could not create the diagram: ${(error as Error)?.message || error}`, fixes: [] }]);
+      setStatus({ state: 'error', count: 1 });
+    }
+  };
+
+  const importFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const imported: SavedDiagram[] = [];
+    const problems: EngineDiagnostic[] = [];
+    for (const file of Array.from(files)) {
+      const value = await file.text();
+      let ir: unknown;
+      try {
+        ir = JSON.parse(value);
+      } catch (error) {
+        problems.push({ code: 'playground/import', severity: 'error', message: `${file.name} is not valid JSON: ${(error as Error).message}`, fixes: ['import the .json IR file (Download JSON), not the rendered .html'] });
+        continue;
+      }
+      if (typeof (ir as { diagram_type?: unknown })?.diagram_type !== 'string') {
+        problems.push({ code: 'playground/import', severity: 'error', message: `${file.name} has no "diagram_type", so it is not a vc-archify diagram IR.`, fixes: ['import a vc-archify IR JSON file'] });
+        continue;
+      }
+      imported.push(createDiagram(titleOf(value) ?? file.name.replace(/\.json$/i, ''), value));
+    }
+    if (importRef.current) importRef.current.value = '';
+    if (imported.length) {
+      addToLibrary(imported);
+      openSaved(imported[imported.length - 1].id, imported);
+      setLibraryNote(`Imported ${imported.length} ${imported.length === 1 ? 'diagram' : 'diagrams'} into My diagrams.`);
+    }
+    if (problems.length) {
+      setDiagnostics(problems);
+      setStatus({ state: 'error', count: problems.length });
+    }
+  };
+
+  const renameSaved = (name: string) => {
+    if (!savedId) return;
+    updateLibrary((current) => current.map((d) => (d.id === savedId ? { ...d, name, updatedAt: Date.now() } : d)));
+  };
+
+  const deleteSaved = async () => {
+    if (!currentSaved) return;
+    const entry = currentSaved;
+    const inFolder = Boolean(entry.folder && sync.folder.state === 'connected');
+    if (!window.confirm(`Delete “${entry.name}” from My diagrams${inFolder ? ` and its file ${entry.folder!.file} from the folder` : ''}? This cannot be undone (download the JSON first to keep a copy).`)) return;
+    const fromGitHub = Boolean(entry.github && sync.github.configured
+      && window.confirm(`Also delete ${entry.github.path} from ${sync.github.settings.repo} on GitHub? This makes a commit.`));
+    updateLibrary((current) => current.filter((d) => d.id !== entry.id));
+    setLibraryNote(`Deleted “${entry.name}”.`);
+    void loadExample(defaultSource, { updateUrl: false });
+    if (inFolder) await sync.folder.remove(entry);
+    if (fromGitHub) await sync.github.remove(entry);
   };
 
   const selectRange = (start: number, end: number) => {
@@ -343,7 +507,9 @@ export function Playground({ examples, defaultSource }: Props) {
     }
   };
 
-  const name = baseName(text, source, edited, rendered?.type);
+  const name = currentSaved
+    ? `${slugify(currentSaved.name) || 'diagram'}${currentSaved.type ? `.${currentSaved.type}` : ''}`
+    : baseName(text, source, edited, rendered?.type);
   const statusText = (() => {
     switch (status.state) {
       case 'loading':
@@ -391,7 +557,7 @@ export function Playground({ examples, defaultSource }: Props) {
 
         <div className={styles.controls}>
           <div className={styles.field}>
-            <label htmlFor={exampleId}>Example</label>
+            <label htmlFor={exampleId}>Diagram</label>
             <select
               id={exampleId}
               className={styles.select}
@@ -399,9 +565,18 @@ export function Playground({ examples, defaultSource }: Props) {
               onChange={(event) => onPickExample(event.target.value)}
               data-testid="pg-example"
             >
-              {!source && <option value="">Your draft</option>}
+              {!source && <option value="">Unsaved draft</option>}
+              {sortedSaved.length > 0 && (
+                <optgroup label="My diagrams">
+                  {sortedSaved.map((d) => (
+                    <option key={d.id} value={savedSource(d.id)}>
+                      {d.name} · {typeLabelOf(d.type)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {exampleGroups.map(([label, group]) => (
-                <optgroup key={label} label={label}>
+                <optgroup key={label} label={`Examples · ${label}`}>
                   {group.map((e) => (
                     <option key={e.source} value={e.source}>
                       {e.title} · {e.typeLabel}
@@ -411,6 +586,93 @@ export function Playground({ examples, defaultSource }: Props) {
               ))}
             </select>
           </div>
+
+          <div className={styles.row}>
+            <select
+              className={`${styles.select} ${styles.newSelect}`}
+              value=""
+              onChange={(event) => {
+                const type = event.target.value;
+                event.target.value = '';
+                if (type) void createNew(type);
+              }}
+              disabled={!ready || !libraryOk}
+              aria-label="New diagram from a template"
+              data-testid="pg-new"
+            >
+              <option value="">+ New…</option>
+              {exampleGroups.map(([label, group]) => (
+                <option key={label} value={group[0].type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={`button ${styles.small}`}
+              onClick={() => importRef.current?.click()}
+              disabled={!libraryOk}
+              data-testid="pg-import"
+            >
+              Import JSON
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept="application/json,.json"
+              multiple
+              hidden
+              onChange={(event) => void importFiles(event.target.files)}
+              data-testid="pg-import-input"
+            />
+            {!savedId && (
+              <button type="button" className={`button ${styles.small}`} onClick={saveAsMine} disabled={!ready || !text.trim() || !libraryOk} data-testid="pg-save">
+                Save to My diagrams
+              </button>
+            )}
+            {currentExample && edited && (
+              <button type="button" className={`button ${styles.small}`} onClick={() => void loadExample(currentExample.source)}>
+                Revert edits
+              </button>
+            )}
+          </div>
+
+          {currentSaved && (
+            <div className={styles.savedRow}>
+              <label className={styles.nameField}>
+                <span>Name</span>
+                <input
+                  className={styles.nameInput}
+                  value={currentSaved.name}
+                  onChange={(event) => renameSaved(event.target.value)}
+                  onBlur={(event) => !event.target.value.trim() && renameSaved(titleOf(text) ?? 'Untitled diagram')}
+                  data-testid="pg-name"
+                />
+              </label>
+              <button type="button" className={`button ${styles.small} ${styles.danger}`} onClick={() => void deleteSaved()} data-testid="pg-delete">
+                Delete
+              </button>
+            </div>
+          )}
+          <p className={styles.libraryHint} data-testid="pg-library-note">
+            {libraryNote ||
+              (!libraryOk
+                ? 'Browser storage is unavailable, so diagrams cannot be saved here. Use Download JSON to keep your work.'
+                : currentSaved
+                  ? 'Saved in this browser as you edit. Download JSON to back it up or move it to another device.'
+                  : 'Examples are read-only templates. Save to My diagrams to keep your edits in this browser.')}
+          </p>
+          {currentSaved && syncBadges(sync, currentSaved).length > 0 && (
+            <p className={styles.badges} data-testid="pg-sync-badges">
+              {syncBadges(sync, currentSaved).map((badge) => (
+                <span key={badge} className={styles.badge} data-ok={badge.endsWith('✓') ? 'true' : 'false'}>
+                  {badge}
+                </span>
+              ))}
+            </p>
+          )}
+          <SyncPanel sync={sync} current={currentSaved} disabled={!libraryOk} />
+
           <div className={styles.row}>
             <button type="button" className={`button primary ${styles.small}`} onClick={() => void render(text)} disabled={!ready} data-testid="pg-render">
               Render
@@ -419,11 +681,6 @@ export function Playground({ examples, defaultSource }: Props) {
               <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
               Auto-render
             </label>
-            {source && edited && (
-              <button type="button" className={`button ${styles.small}`} onClick={() => void loadExample(source)}>
-                Revert edits
-              </button>
-            )}
           </div>
           <fieldset className={styles.themes}>
             <legend className={styles.inlineLegend}>Preview theme</legend>
@@ -498,7 +755,9 @@ export function Playground({ examples, defaultSource }: Props) {
         <div className={styles.editorBlock}>
           <div className={styles.editorHeader}>
             <label htmlFor={editorId} className={styles.editorLabel}>
-              IR JSON{currentExample ? <span className={styles.muted}> · {currentExample.title}{edited ? ' (edited)' : ''}</span> : null}
+              IR JSON
+              {currentSaved ? <span className={styles.muted}> · {currentSaved.name}</span> : null}
+              {currentExample ? <span className={styles.muted}> · {currentExample.title}{edited ? ' (edited, not saved)' : ''}</span> : null}
             </label>
             <button type="button" className={`button ${styles.tiny}`} onClick={formatJson} disabled={!ready}>
               Format
@@ -536,7 +795,7 @@ export function Playground({ examples, defaultSource }: Props) {
               type="button"
               className={`button ${styles.small}`}
               disabled={!rendered}
-              onClick={() => rendered && download(`${baseName(rendered.text, source, edited, rendered.type)}.html`, rendered.html, 'text/html;charset=utf-8')}
+              onClick={() => rendered && download(`${currentSaved ? name : baseName(rendered.text, source, edited, rendered.type)}.html`, rendered.html, 'text/html;charset=utf-8')}
               data-testid="pg-download-html"
             >
               Download HTML
@@ -607,7 +866,14 @@ export function Playground({ examples, defaultSource }: Props) {
             <div className={styles.placeholder}>{status.state === 'error' ? 'Fix the problems to see a preview.' : 'The diagram appears here.'}</div>
           )}
           {rendered && (stale || status.state === 'error') && (
-            <p className={styles.staleBadge}>Showing the last successful render</p>
+            <p className={styles.staleBadge} role="note" data-testid="pg-stale">
+              <span className={styles.staleIcon} aria-hidden="true">i</span>
+              {status.state === 'error'
+                ? 'Preview shows the last successful render. Fix the issues in Diagnostics to update it.'
+                : status.state === 'rendering' || autoRender
+                  ? 'Updating the preview…'
+                  : 'Preview is out of date. Press Render (Ctrl/⌘ + Enter) to update it.'}
+            </p>
           )}
         </div>
       </section>

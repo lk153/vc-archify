@@ -59,6 +59,19 @@ pnpm check:engines              # Node pins agree (devEngines.runtime ↔ engine
 
 Run scripts through `pnpm` (or `node_modules/.bin/node`) so they use the pinned Node 24.
 
+### Where diagrams live
+
+- **Built-in examples** (the "Examples · …" groups in the Diagram picker) are the JSON files in [`examples/`](examples/). They are rendered and checked at build time and served read-only at `/examples/<file>.json`.
+- **My diagrams** (the first group in the picker) are kept in your browser's `localStorage`, for this browser and device only. You add them with **+ New…** (starts from a template of that type), **Import JSON** (one or more `.json` IR files, e.g. ones your agent wrote with the skill), or **Save to My diagrams** (keeps your edits to an example or draft). They save automatically as you edit; rename or delete them in the panel. Use **Download JSON** to back up or move a diagram. A downloaded `.html` can't be imported, because it doesn't contain the source IR.
+
+### Sync My diagrams (optional)
+
+Open **Sync** in the panel. Both targets can be on at the same time.
+
+- **Folder on this computer** (Chromium's File System Access API): **Connect folder…** and pick a folder, such as one inside a git repo or a synced Dropbox/iCloud/Drive folder. Every diagram in My diagrams is written there as `<name>.<type>.json` and updated as you edit. JSON diagrams that appear in the folder (from your agent, `git pull`, another device) are added on connect, reload or **Sync now**. Deleting a diagram deletes its file. After a browser restart, click **Reconnect** to grant access again.
+- **GitHub repository**: enter `owner/name`, branch, a folder in the repo (default `diagrams`) and a **fine-grained personal access token** limited to that repository with *Contents: Read and write*. The token goes only to `api.github.com` and is kept for the tab session unless you tick "Remember the token on this device". **Pull** loads the folder's diagrams; **Commit this diagram** or **Commit all changes** makes one commit per diagram (`vc-archify: add|update <name>`); deleting a diagram can also delete it from the repo.
+- **Conflicts never lose data.** If a diagram changed on both sides, the other version is kept as a separate "(folder copy)" or "(GitHub copy)" diagram.
+
 ### Add or change a playground example
 
 1. Add or edit `examples/<name>.<type>.json`.

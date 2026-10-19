@@ -85,7 +85,7 @@ test.describe('playground', () => {
     await openPlayground(page);
     const entry = firstOfType('erd');
     const before = await renders(page);
-    await page.getByLabel('Example').selectOption(entry.source);
+    await page.getByLabel('Diagram', { exact: true }).selectOption(entry.source);
     await nextRender(page, before);
     await expect(status(page)).toHaveAttribute('data-state', 'ok');
     await expect(editor(page)).toHaveValue(sourceText(entry));
@@ -136,7 +136,7 @@ test.describe('playground', () => {
     await openPlayground(page);
     for (const entry of examples.entries) {
       const before = await renders(page);
-      const picker = page.getByLabel('Example');
+      const picker = page.getByLabel('Diagram', { exact: true });
       if ((await picker.inputValue()) === entry.source) await page.getByTestId('pg-render').click();
       else await picker.selectOption(entry.source);
       await nextRender(page, before);
