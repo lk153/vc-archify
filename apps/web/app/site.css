@@ -1,16 +1,103 @@
 /* App chrome shared outside the playground component. */
 
+/* Theme switch, matching the diagram viewer's toggle: a pill track, a sliding
+   knob, and a sun (light) / moon (dark) icon on the knob. */
 .theme-toggle {
-  width: 36px;
+  --knob: 18px;
+  --track-x: 7px;
+  --knob-left: 9px;
+  position: relative;
+  flex: none;
+  width: 56px;
   height: 36px;
-  border: 1px solid var(--border-strong);
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--text);
-  font-size: 0.95rem;
   cursor: pointer;
 }
 
-.theme-toggle:hover {
-  border-color: var(--accent);
+/* track */
+.theme-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 9px var(--track-x);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+  transition: background 0.15s;
+}
+
+.theme-toggle:hover::before {
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+}
+
+/* knob */
+.theme-toggle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: var(--knob-left);
+  width: var(--knob);
+  height: var(--knob);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.12);
+  transform: translateY(-50%);
+  transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* icon on the knob (light: sun) */
+.theme-toggle-icon {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: calc(var(--knob-left) + 3px);
+  width: 12px;
+  height: 12px;
+  background: var(--kind-cloud);
+  transform: translateY(-50%);
+  transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='3.1'/%3E%3Cpath d='M10 2.2v1.4M10 16.4v1.4M2.2 10h1.4M16.4 10h1.4M4.5 4.5l1 1M14.5 14.5l1 1M15.5 4.5l-1 1M5.5 14.5l-1 1'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cg fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='3.1'/%3E%3Cpath d='M10 2.2v1.4M10 16.4v1.4M2.2 10h1.4M16.4 10h1.4M4.5 4.5l1 1M14.5 14.5l1 1M15.5 4.5l-1 1M5.5 14.5l-1 1'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* dark: knob on the right, moon icon (explicit choice, or the system default when none) */
+:root[data-theme='dark'] .theme-toggle::before {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme='dark'] .theme-toggle::after {
+  left: calc(100% - var(--knob-left) - var(--knob));
+  background: #3b4a63;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme='dark'] .theme-toggle-icon {
+  left: calc(100% - var(--knob-left) - var(--knob) + 3px);
+  background: #c7d2fe;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .theme-toggle::before {
+    background: rgba(148, 163, 184, 0.16);
+  }
+  :root:not([data-theme='light']) .theme-toggle::after {
+    left: calc(100% - var(--knob-left) - var(--knob));
+    background: #3b4a63;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  :root:not([data-theme='light']) .theme-toggle-icon {
+    left: calc(100% - var(--knob-left) - var(--knob) + 3px);
+    background: #c7d2fe;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M15.2 12.7A6.3 6.3 0 017.3 4.8a6.3 6.3 0 107.9 7.9Z' fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }

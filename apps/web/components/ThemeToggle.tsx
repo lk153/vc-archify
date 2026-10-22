@@ -9,13 +9,21 @@ function systemTheme(): Theme {
   return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
-/** Site theme switch; the choice is a per-visitor convenience in localStorage. */
+/**
+ * App theme switch, styled like the diagram viewer's own theme toggle: a pill
+ * track with a sliding knob that shows a sun (light) or moon (dark). Its look
+ * follows <html data-theme> / prefers-color-scheme in CSS, so it is right before
+ * hydration too. The choice is a per-visitor convenience in localStorage.
+ */
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    const current = document.documentElement.dataset.theme as Theme | undefined;
-    setTheme(current ?? systemTheme());
+    const read = () => setTheme((document.documentElement.dataset.theme as Theme | undefined) ?? systemTheme());
+    read();
+    const media = window.matchMedia?.('(prefers-color-scheme: light)');
+    media?.addEventListener('change', read);
+    return () => media?.removeEventListener('change', read);
   }, []);
 
   const toggle = () => {
@@ -29,9 +37,10 @@ export function ThemeToggle() {
     setTheme(next);
   };
 
+  const label = theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
   return (
-    <button type="button" className="theme-toggle" onClick={toggle} aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}>
-      <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
+    <button type="button" className="theme-toggle" onClick={toggle} aria-label={label} title={label}>
+      <span className="theme-toggle-icon" aria-hidden="true" />
     </button>
   );
 }
