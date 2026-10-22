@@ -59,6 +59,15 @@ pnpm check:engines              # Node pins agree (devEngines.runtime ↔ engine
 
 Run scripts through `pnpm` (or `node_modules/.bin/node`) so they use the pinned Node 24.
 
+Before you push to `main`, run the release checklist:
+
+```bash
+make verify       # CI's gates + a smoke test of the production build + repo checks (secrets, licence, vercel.json)
+make help         # every step on its own, plus the optional vercel-build and smoke-prod
+```
+
+It needs Google Chrome and free ports 3107 and 3108 (`E2E_PORT=… SMOKE_PORT=…` to change them).
+
 ### Where diagrams live
 
 - **Built-in examples** (the "Examples · …" groups in the Diagram picker) are the JSON files in [`examples/`](examples/). They are rendered and checked at build time and served read-only at `/examples/<file>.json`.
