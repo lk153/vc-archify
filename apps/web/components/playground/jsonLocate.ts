@@ -127,16 +127,51 @@ class Scanner {
   }
 }
 
+const segmentsOf = (pointer: string) => (pointer === '' || pointer === '/'
+  ? []
+  : pointer.replace(/^\//, '').split('/').map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~')));
+
 export function locatePointer(text: string, pointer: string): TextRange | null {
-  const segments = pointer === '' || pointer === '/'
-    ? []
-    : pointer.replace(/^\//, '').split('/').map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~'));
   try {
     const scanner = new Scanner(text);
-    for (const segment of segments) {
+    for (const segment of segmentsOf(pointer)) {
       if (!scanner.descend(segment)) return null;
     }
     return scanner.value();
+  } catch {
+    return null;
+  }
+}
+
+export interface MemberRange {
+  key: string;
+  keyStart: number;
+  valueStart: number;
+  valueEnd: number;
+}
+
+/** The members of the object at `pointer`, with the character range of each key and value. */
+export function objectMembers(text: string, pointer: string): { range: TextRange; members: MemberRange[] } | null {
+  const range = locatePointer(text, pointer);
+  if (!range || text[range.start] !== '{') return null;
+  try {
+    const scanner = new Scanner(text);
+    scanner.i = range.start + 1;
+    const members: MemberRange[] = [];
+    scanner.ws();
+    if (text[scanner.i] === '}') return { range, members };
+    for (;;) {
+      scanner.ws();
+      const keyStart = scanner.i;
+      const key = scanner.string();
+      scanner.expect(':');
+      const value = scanner.value();
+      members.push({ key, keyStart, valueStart: value.start, valueEnd: value.end });
+      scanner.ws();
+      if (text[scanner.i] !== ',') break;
+      scanner.i += 1;
+    }
+    return { range, members };
   } catch {
     return null;
   }

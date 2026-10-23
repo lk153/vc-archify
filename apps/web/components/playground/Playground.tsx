@@ -10,6 +10,8 @@ import {
   createDiagram, loadLibrary, savedIdOf, savedSource, sortedLibrary, storageAvailable, storeLibrary, titleOf, typeOf,
   type SavedDiagram,
 } from './library';
+import { applyMove, dragConfig, parseMoveMessage, type MoveRequest } from './layout/applyMove';
+import { PLAYGROUND_MESSAGE_SOURCE, PREVIEW_MESSAGE_SOURCE, parseCamera, withEditLayer, type PreviewCamera } from './layout/editLayer';
 import { withPreviewTheme, type PreviewTheme, type ResolvedTheme } from './previewTheme';
 import { SyncPanel, syncBadges } from './SyncPanel';
 import { useDiagramSync } from './sync/useDiagramSync';
@@ -42,9 +44,39 @@ interface Stored {
   previewTheme?: PreviewTheme;
   panelWidth?: number;
   panelOpen?: boolean;
+  dragEnabled?: boolean;
 }
 
 type Rendered = RenderSuccess & { text: string };
+
+/** One preview document. A new render loads hidden and replaces the visible one when ready. */
+interface PreviewFrame {
+  key: number;
+  doc: string;
+  ready: boolean;
+}
+
+/** A drag waiting for its render: kept when it renders, rolled back when the engine rejects it. */
+interface PendingMove {
+  text: string;
+  summary: string;
+  before: { text: string; edited: boolean; status: Status; diagnostics: EngineDiagnostic[]; warnings: string[] };
+}
+
+interface LayoutNote {
+  tone: 'ok' | 'error';
+  text: string;
+  /** Every problem, for the tooltip. */
+  detail?: string;
+  /** A rejected move that can still be applied, to fix the rest by hand. */
+  rejected?: string;
+}
+
+const UNDO_LIMIT = 100;
+const NOT_DRAGGABLE: Record<string, string> = {
+  sequence: 'Sequence diagrams are laid out by the engine: change the participant order or message y values in the JSON.',
+  lifecycle: 'Lifecycle diagrams are laid out by the engine: change states and transitions in the JSON.',
+};
 
 const STORAGE_KEY = 'vca-playground-v1';
 const AUTO_RENDER_DELAY_MS = 700;
@@ -145,12 +177,51 @@ export function Playground({ examples, defaultSource }: Props) {
   const [library, setLibrary] = useState<SavedDiagram[]>([]);
   const [libraryOk, setLibraryOk] = useState(true);
   const [libraryNote, setLibraryNote] = useState('');
+  const [dragEnabled, setDragEnabled] = useState(true);
+  const [frames, setFrames] = useState<PreviewFrame[]>([]);
+  const [layoutNote, setLayoutNote] = useState<LayoutNote | null>(null);
+  const [layoutBusy, setLayoutBusy] = useState(false);
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestedRef = useRef<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const sourceRef = useRef<string | null>(null);
+  // Layout editing: undo/redo snapshots of the JSON, the drag awaiting its
+  // render, the preview frames and the reader's camera inside the preview.
+  const undoRef = useRef<string[]>([]);
+  const redoRef = useRef<string[]>([]);
+  const pendingMoveRef = useRef<PendingMove | null>(null);
+  const frameElsRef = useRef(new Map<number, HTMLIFrameElement>());
+  const frameKeyRef = useRef(0);
+  const activeFrameRef = useRef<number | null>(null);
+  const focusHandoffRef = useRef<number | null>(null);
+  const cameraRef = useRef<PreviewCamera | null>(null);
+  // Cameras from frames older than this belong to the previous diagram.
+  const cameraFloorRef = useRef(0);
+  const focusedNodeRef = useRef<string | null>(null);
+  const restoreSentRef = useRef(new Map<number, string>());
+
+  const syncHistory = useCallback(() => setHistory({ undo: undoRef.current.length, redo: redoRef.current.length }), []);
+  const resetLayout = useCallback((options: { camera?: boolean } = {}) => {
+    undoRef.current = [];
+    redoRef.current = [];
+    pendingMoveRef.current = null;
+    if (options.camera) {
+      cameraRef.current = null;
+      cameraFloorRef.current = frameKeyRef.current + 1;
+      focusedNodeRef.current = null;
+    }
+    setHistory({ undo: 0, redo: 0 });
+    setLayoutNote(null);
+    setLayoutBusy(false);
+  }, []);
+  const postToPreview = useCallback((type: string) => {
+    const key = activeFrameRef.current;
+    const el = key === null ? undefined : frameElsRef.current.get(key);
+    el?.contentWindow?.postMessage({ source: PLAYGROUND_MESSAGE_SOURCE, type }, '*');
+  }, []);
 
   const exampleBySource = useMemo(() => new Map(examples.map((e) => [e.source, e])), [examples]);
   // Group the picker by diagram type, in the order the examples arrive.
@@ -163,18 +234,58 @@ export function Playground({ examples, defaultSource }: Props) {
   const render = useCallback(async (value: string) => {
     requestedRef.current = value;
     abortRef.current?.abort();
+    // Another render (typing, a new diagram) supersedes a drag still waiting for its render.
+    if (pendingMoveRef.current && pendingMoveRef.current.text !== value) {
+      pendingMoveRef.current = null;
+      setLayoutBusy(false);
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setStatus({ state: 'rendering' });
+    // A drag the engine rejects is rolled back: the JSON, diagnostics and
+    // preview return to how they were, and the note says why.
+    const rejectMove = (move: PendingMove, problems: EngineDiagnostic[]) => {
+      pendingMoveRef.current = null;
+      requestedRef.current = move.before.text;
+      setText(move.before.text);
+      setEdited(move.before.edited);
+      setDiagnostics(move.before.diagnostics);
+      setWarnings(move.before.warnings);
+      setStatus(move.before.status);
+      setLayoutBusy(false);
+      postToPreview('revert');
+      // The first line of the first problem; Apply anyway shows them all in Diagnostics.
+      const [first] = problems;
+      const more = problems.length > 1 ? ` (+${problems.length - 1} more)` : '';
+      setLayoutNote({
+        tone: 'error',
+        text: `That position breaks a layout rule, so the move was undone: ${first?.message.split('\n')[0].trim() || 'the engine rejected it'}${more}`,
+        detail: problems.map((problem) => problem.message).join('\n\n'),
+        rejected: value,
+      });
+    };
     try {
       const result = await renderInBrowser(value, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setRenderCount((count) => count + 1);
+      const move = pendingMoveRef.current?.text === value ? pendingMoveRef.current : null;
+      if (move && !result.ok) {
+        rejectMove(move, result.diagnostics);
+        return;
+      }
       setWarnings(result.warnings ?? []);
       if (result.ok) {
         setRendered({ ...result, text: value });
         setDiagnostics([]);
         setStatus({ state: 'ok', ms: result.ms, bytes: result.bytes, type: result.type });
+        if (move) {
+          pendingMoveRef.current = null;
+          undoRef.current = [...undoRef.current, move.before.text].slice(-UNDO_LIMIT);
+          redoRef.current = [];
+          syncHistory();
+          setLayoutBusy(false);
+          setLayoutNote({ tone: 'ok', text: move.summary });
+        }
       } else {
         setDiagnostics(result.diagnostics);
         setStatus({ state: 'error', count: result.diagnostics.length });
@@ -182,12 +293,18 @@ export function Playground({ examples, defaultSource }: Props) {
     } catch (error) {
       if ((error as Error)?.name === 'AbortError') return;
       setRenderCount((count) => count + 1);
-      setDiagnostics([{ code: 'playground/unexpected', severity: 'error', message: String((error as Error)?.message || error), fixes: [] }]);
+      const problem: EngineDiagnostic = { code: 'playground/unexpected', severity: 'error', message: String((error as Error)?.message || error), fixes: [] };
+      const move = pendingMoveRef.current?.text === value ? pendingMoveRef.current : null;
+      if (move) {
+        rejectMove(move, [problem]);
+        return;
+      }
+      setDiagnostics([problem]);
       setStatus({ state: 'error', count: 1 });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, []);
+  }, [postToPreview, syncHistory]);
 
   const loadExample = useCallback(async (next: string, { updateUrl = true } = {}) => {
     const example = exampleBySource.get(next);
@@ -199,6 +316,7 @@ export function Playground({ examples, defaultSource }: Props) {
       const response = await fetch(`/examples/${encodeURIComponent(next)}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const value = await response.text();
+      resetLayout({ camera: true });
       setText(value);
       setSource(next);
       setEdited(false);
@@ -215,7 +333,7 @@ export function Playground({ examples, defaultSource }: Props) {
       }]);
       setStatus({ state: 'error', count: 1 });
     }
-  }, [exampleBySource, render]);
+  }, [exampleBySource, render, resetLayout]);
 
   // ---- My diagrams (browser storage) ------------------------------------------
   const updateLibrary = useCallback((update: (current: SavedDiagram[]) => SavedDiagram[]) => {
@@ -230,6 +348,7 @@ export function Playground({ examples, defaultSource }: Props) {
     const entry = (list ?? library).find((d) => d.id === id);
     if (!entry) return;
     abortRef.current?.abort();
+    resetLayout({ camera: true });
     setText(entry.text);
     setSource(savedSource(entry.id));
     setEdited(false);
@@ -237,7 +356,7 @@ export function Playground({ examples, defaultSource }: Props) {
     setExampleQuery(null);
     setLibraryNote('');
     void render(entry.text);
-  }, [library, render]);
+  }, [library, render, resetLayout]);
 
   const addToLibrary = useCallback((entries: SavedDiagram[]) => {
     updateLibrary((current) => [...entries, ...current]);
@@ -251,6 +370,7 @@ export function Playground({ examples, defaultSource }: Props) {
       const openId = savedIdOf(sourceRef.current);
       const entry = openId && ids.includes(openId) ? next.find((d) => d.id === openId) : undefined;
       if (entry) {
+        resetLayout();
         setText(entry.text);
         void render(entry.text);
         setLibraryNote(`“${entry.name}” was updated from sync.`);
@@ -265,6 +385,7 @@ export function Playground({ examples, defaultSource }: Props) {
     if (stored.previewTheme && THEMES.some((t) => t.value === stored.previewTheme)) setPreviewTheme(stored.previewTheme);
     if (typeof stored.panelWidth === 'number') setPanelWidth(clampPanel(stored.panelWidth));
     if (typeof stored.panelOpen === 'boolean') setPanelOpen(stored.panelOpen);
+    if (typeof stored.dragEnabled === 'boolean') setDragEnabled(stored.dragEnabled);
     const ok = storageAvailable();
     const saved = ok ? loadLibrary() : [];
     setLibraryOk(ok);
@@ -308,7 +429,7 @@ export function Playground({ examples, defaultSource }: Props) {
   const storedSourceRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!ready) return undefined;
-    const save = () => writeStored({ text, source, edited, autoRender, previewTheme, panelWidth, panelOpen });
+    const save = () => writeStored({ text, source, edited, autoRender, previewTheme, panelWidth, panelOpen, dragEnabled });
     if (storedSourceRef.current !== source) {
       storedSourceRef.current = source;
       save();
@@ -316,7 +437,7 @@ export function Playground({ examples, defaultSource }: Props) {
     }
     const timer = window.setTimeout(save, 400);
     return () => window.clearTimeout(timer);
-  }, [text, source, edited, autoRender, previewTheme, panelWidth, panelOpen, ready]);
+  }, [text, source, edited, autoRender, previewTheme, panelWidth, panelOpen, dragEnabled, ready]);
 
   // A diagram from "My diagrams" saves itself as you edit.
   const savedId = savedIdOf(source);
@@ -376,7 +497,13 @@ export function Playground({ examples, defaultSource }: Props) {
   }, []);
 
   const effectiveTheme: ResolvedTheme = previewTheme === 'site' ? siteTheme : previewTheme;
-  const srcDoc = useMemo(() => (rendered ? withPreviewTheme(rendered.html, effectiveTheme) : ''), [rendered, effectiveTheme]);
+  const drag = useMemo(() => (rendered && dragEnabled ? dragConfig(rendered.text) : null), [rendered, dragEnabled]);
+  // The preview copy gets the theme override and the drag layer. Downloads use
+  // the untouched engine output.
+  const srcDoc = useMemo(
+    () => (rendered ? withEditLayer(withPreviewTheme(rendered.html, effectiveTheme), { drag }) : ''),
+    [rendered, effectiveTheme, drag],
+  );
   const stale = Boolean(rendered && rendered.text !== text);
   const currentExample = source ? exampleBySource.get(source) : undefined;
   sourceRef.current = source;
@@ -384,13 +511,182 @@ export function Playground({ examples, defaultSource }: Props) {
   const sortedSaved = useMemo(() => sortedLibrary(library), [library]);
   const typeLabelOf = (type: string | null) => examples.find((e) => e.type === type)?.typeLabel ?? type ?? 'Diagram';
 
+  // Double-buffered preview: a new document loads underneath and replaces the
+  // visible one once it reports `ready` (camera restored), so re-rendering
+  // after a drag does not flash.
+  useEffect(() => {
+    if (!srcDoc) {
+      setFrames([]);
+      return;
+    }
+    const key = ++frameKeyRef.current;
+    setFrames((current) => {
+      const active = current.filter((f) => f.ready).slice(-1);
+      return [...active, { key, doc: srcDoc, ready: active.length === 0 }];
+    });
+  }, [srcDoc]);
+  const markReady = useCallback((key: number) => {
+    setFrames((current) => {
+      const index = current.findIndex((f) => f.key === key);
+      if (index === -1 || (current[index].ready && index === 0)) return current;
+      const focused = document.activeElement;
+      if (current.some((f) => f.key !== key && frameElsRef.current.get(f.key) === focused)) focusHandoffRef.current = key;
+      return [{ ...current[index], ready: true }, ...current.slice(index + 1)];
+    });
+  }, []);
+  const activeFrame = frames.filter((f) => f.ready).at(-1);
+  activeFrameRef.current = activeFrame?.key ?? null;
+  useEffect(() => {
+    const key = focusHandoffRef.current;
+    if (key === null || activeFrame?.key !== key) return;
+    focusHandoffRef.current = null;
+    // The old preview had focus: keep it in the preview, on the same node.
+    const el = frameElsRef.current.get(key);
+    el?.focus();
+    if (focusedNodeRef.current) el?.contentWindow?.postMessage({ source: PLAYGROUND_MESSAGE_SOURCE, type: 'focus', id: focusedNodeRef.current }, '*');
+  }, [activeFrame?.key]);
+
   const onEdit = (value: string) => {
     setText(value);
+    if (undoRef.current.length || redoRef.current.length || layoutNote) resetLayout();
     if (!edited && !savedId) {
       setEdited(true);
       setExampleQuery(null);
     }
   };
+
+  // ---- layout editing: drags from the preview, undo and redo ---------------------
+  const onPreviewMove = (move: MoveRequest) => {
+    if (!rendered || pendingMoveRef.current) {
+      postToPreview('revert');
+      return;
+    }
+    const result = applyMove(text, rendered.text, move);
+    if (!result.ok) {
+      postToPreview('revert');
+      if (!result.noop) setLayoutNote({ tone: 'error', text: result.reason });
+      return;
+    }
+    pendingMoveRef.current = {
+      text: result.text,
+      summary: result.summary,
+      before: { text, edited, status, diagnostics, warnings },
+    };
+    setLayoutBusy(true);
+    setLayoutNote(null);
+    setText(result.text);
+    if (!edited && !savedId) {
+      setEdited(true);
+      setExampleQuery(null);
+    }
+    void render(result.text);
+  };
+
+  const applyLayoutText = (value: string, note: string) => {
+    setText(value);
+    setLayoutNote({ tone: 'ok', text: note });
+    if (!edited && !savedId) {
+      setEdited(true);
+      setExampleQuery(null);
+    }
+    void render(value);
+  };
+  const undoLayout = () => {
+    const previous = undoRef.current.at(-1);
+    if (previous === undefined || pendingMoveRef.current) return;
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = [...redoRef.current, text];
+    syncHistory();
+    applyLayoutText(previous, 'Undid the last move.');
+  };
+  const redoLayout = () => {
+    const next = redoRef.current.at(-1);
+    if (next === undefined || pendingMoveRef.current) return;
+    redoRef.current = redoRef.current.slice(0, -1);
+    undoRef.current = [...undoRef.current, text];
+    syncHistory();
+    applyLayoutText(next, 'Redid the move.');
+  };
+  const applyRejected = () => {
+    const rejected = layoutNote?.rejected;
+    if (!rejected) return;
+    undoRef.current = [...undoRef.current, text].slice(-UNDO_LIMIT);
+    redoRef.current = [];
+    syncHistory();
+    setText(rejected);
+    setLayoutNote({ tone: 'ok', text: 'Applied the move anyway. Diagnostics list what to fix; the preview updates once it renders.' });
+    if (!edited && !savedId) {
+      setEdited(true);
+      setExampleQuery(null);
+    }
+    void render(rejected);
+  };
+
+  // Messages from the preview frames. Only the visible frame may edit.
+  const previewHandlers = useRef({ onPreviewMove, undoLayout, redoLayout });
+  previewHandlers.current = { onPreviewMove, undoLayout, redoLayout };
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { source?: unknown; type?: unknown; camera?: unknown } | null;
+      if (!data || data.source !== PREVIEW_MESSAGE_SOURCE) return;
+      let key: number | null = null;
+      for (const [k, el] of frameElsRef.current) if (el.contentWindow === event.source) key = k;
+      if (key === null) return;
+      // A new render is about to replace the visible one: reopen it at the
+      // current camera, and again as it is swapped in if the reader zoomed meanwhile.
+      const restore = (frameKey: number) => {
+        const camera = frameKey >= cameraFloorRef.current ? cameraRef.current : null;
+        const sent = JSON.stringify(camera);
+        if (data.type === 'ready' && restoreSentRef.current.get(frameKey) === sent) return;
+        restoreSentRef.current.set(frameKey, sent);
+        frameElsRef.current.get(frameKey)?.contentWindow?.postMessage({ source: PLAYGROUND_MESSAGE_SOURCE, type: 'restore', camera }, '*');
+      };
+      if (data.type === 'loaded') {
+        restore(key);
+        return;
+      }
+      if (data.type === 'ready') {
+        restore(key);
+        markReady(key);
+        return;
+      }
+      if (key !== activeFrameRef.current) return;
+      const camera = parseCamera(data.camera);
+      if (camera && key >= cameraFloorRef.current) cameraRef.current = camera;
+      if (data.type === 'focus') {
+        const id = (data as { id?: unknown }).id;
+        focusedNodeRef.current = typeof id === 'string' ? id : null;
+      }
+      if (data.type === 'move') {
+        const move = parseMoveMessage(data);
+        if (move) previewHandlers.current.onPreviewMove(move);
+      } else if (data.type === 'undo') {
+        previewHandlers.current.undoLayout();
+      } else if (data.type === 'redo') {
+        previewHandlers.current.redoLayout();
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [markReady]);
+
+  // Ctrl/⌘ + Z / Shift + Z / Y outside text fields undo and redo moves.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const redo = key === 'y' || event.shiftKey;
+      if (!(redo ? redoRef.current.length : undoRef.current.length)) return;
+      event.preventDefault();
+      if (redo) previewHandlers.current.redoLayout();
+      else previewHandlers.current.undoLayout();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const onPickExample = (next: string) => {
     const id = savedIdOf(next);
@@ -682,6 +978,49 @@ export function Playground({ examples, defaultSource }: Props) {
               Auto-render
             </label>
           </div>
+          <div className={styles.layoutControls}>
+            <div className={styles.row}>
+              <label className={styles.check} title="Drag nodes, or a boundary by its label or border, in the preview. The JSON updates.">
+                <input type="checkbox" checked={dragEnabled} onChange={(event) => setDragEnabled(event.target.checked)} data-testid="pg-drag" />
+                Drag to rearrange
+              </label>
+              <div className={styles.historyButtons}>
+                <button
+                  type="button"
+                  className={`button ${styles.tiny}`}
+                  onClick={undoLayout}
+                  disabled={!history.undo || layoutBusy}
+                  title="Undo the last move (Ctrl/⌘ + Z in the preview)"
+                  data-testid="pg-undo"
+                >
+                  Undo move
+                </button>
+                <button
+                  type="button"
+                  className={`button ${styles.tiny}`}
+                  onClick={redoLayout}
+                  disabled={!history.redo || layoutBusy}
+                  title="Redo (Ctrl/⌘ + Shift + Z in the preview)"
+                  data-testid="pg-redo"
+                >
+                  Redo
+                </button>
+              </div>
+            </div>
+            {dragEnabled && rendered && (
+              <p className={styles.libraryHint} data-testid="pg-drag-hint">
+                {drag ? (
+                  <>
+                    Drag in the preview to move it. With a node focused, <kbd>Alt</kbd>/<kbd>⌥</kbd> + arrows nudge it.
+                    {drag.frames === 'all' ? ' Grab a boundary by its label or border.' : drag.frames === 'group' ? ' Grab a group by its border.' : ''}
+                    {drag.snap && drag.free.length ? ' Hold Alt while dragging to skip the 10-unit snap.' : ' Each drop lands in the nearest grid cell.'}
+                  </>
+                ) : (
+                  NOT_DRAGGABLE[rendered.type] ?? `${typeLabelOf(rendered.type)} diagrams are laid out by the engine, so they cannot be dragged.`
+                )}
+              </p>
+            )}
+          </div>
           <fieldset className={styles.themes}>
             <legend className={styles.inlineLegend}>Preview theme</legend>
             {THEMES.map((theme) => (
@@ -851,30 +1190,72 @@ export function Playground({ examples, defaultSource }: Props) {
             <span aria-hidden="true">»</span>
           </button>
         )}
-        <div className={styles.frameWrap} data-stale={stale || status.state === 'error' ? 'true' : 'false'}>
+        <div
+          className={styles.frameWrap}
+          data-stale={(stale && !layoutBusy) || status.state === 'error' ? 'true' : 'false'}
+          data-busy={layoutBusy ? 'true' : undefined}
+        >
           {rendered ? (
-            <iframe
-              title={`Diagram preview: ${rendered.type}`}
-              className={styles.frame}
-              sandbox="allow-scripts allow-downloads"
-              referrerPolicy="no-referrer"
-              srcDoc={srcDoc}
-              data-testid="pg-preview"
-              data-theme={effectiveTheme}
-            />
+            frames.map((frame) => (
+              <iframe
+                key={frame.key}
+                ref={(el) => {
+                  if (el) frameElsRef.current.set(frame.key, el);
+                  else {
+                    frameElsRef.current.delete(frame.key);
+                    restoreSentRef.current.delete(frame.key);
+                  }
+                }}
+                title={`Diagram preview: ${rendered.type}`}
+                className={styles.frame}
+                sandbox="allow-scripts allow-downloads"
+                referrerPolicy="no-referrer"
+                srcDoc={frame.doc}
+                // Fallback when the drag layer cannot report `ready`.
+                onLoad={() => window.setTimeout(() => markReady(frame.key), 600)}
+                data-state={frame.ready ? 'active' : 'pending'}
+                aria-hidden={frame.ready ? undefined : true}
+                tabIndex={frame.ready ? undefined : -1}
+                data-testid={frame.ready ? 'pg-preview' : 'pg-preview-next'}
+                data-theme={effectiveTheme}
+              />
+            ))
           ) : (
             <div className={styles.placeholder}>{status.state === 'error' ? 'Fix the problems to see a preview.' : 'The diagram appears here.'}</div>
           )}
-          {rendered && (stale || status.state === 'error') && (
-            <p className={styles.staleBadge} role="note" data-testid="pg-stale">
-              <span className={styles.staleIcon} aria-hidden="true">i</span>
-              {status.state === 'error'
-                ? 'Preview shows the last successful render. Fix the issues in Diagnostics to update it.'
-                : status.state === 'rendering' || autoRender
-                  ? 'Updating the preview…'
-                  : 'Preview is out of date. Press Render (Ctrl/⌘ + Enter) to update it.'}
-            </p>
-          )}
+          <div className={styles.stageNotes}>
+            {layoutNote && (
+              <div className={styles.layoutNote} data-tone={layoutNote.tone} role="status" data-testid="pg-layout-note">
+                <span className={styles.staleIcon} aria-hidden="true">{layoutNote.tone === 'ok' ? '✓' : '!'}</span>
+                <span className={styles.layoutNoteText} title={layoutNote.detail}>
+                  {layoutNote.text}
+                </span>
+                {layoutNote.tone === 'ok' && history.undo > 0 && !layoutBusy && (
+                  <button type="button" className={styles.noteButton} onClick={undoLayout} data-testid="pg-layout-undo">
+                    Undo
+                  </button>
+                )}
+                {layoutNote.rejected && (
+                  <button type="button" className={styles.noteButton} onClick={applyRejected} data-testid="pg-layout-apply">
+                    Apply anyway
+                  </button>
+                )}
+                <button type="button" className={styles.noteButton} onClick={() => setLayoutNote(null)} aria-label="Dismiss">
+                  ×
+                </button>
+              </div>
+            )}
+            {rendered && ((stale && !layoutBusy) || status.state === 'error') && (
+              <p className={styles.staleBadge} role="note" data-testid="pg-stale">
+                <span className={styles.staleIcon} aria-hidden="true">i</span>
+                {status.state === 'error'
+                  ? 'Preview shows the last successful render. Fix the issues in Diagnostics to update it.'
+                  : status.state === 'rendering' || autoRender
+                    ? 'Updating the preview…'
+                    : 'Preview is out of date. Press Render (Ctrl/⌘ + Enter) to update it.'}
+              </p>
+            )}
+          </div>
         </div>
       </section>
     </div>

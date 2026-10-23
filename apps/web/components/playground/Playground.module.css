@@ -140,6 +140,18 @@
   accent-color: var(--accent);
 }
 
+.layoutControls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.historyButtons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .newSelect {
   width: auto;
   min-height: 34px;
@@ -504,10 +516,22 @@
 }
 
 .frame {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
+}
+
+/* The next render loads underneath and takes over once it is ready. */
+.frameWrap .frame[data-state='pending'] {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.frameWrap[data-busy='true'] {
+  cursor: progress;
 }
 
 .placeholder {
@@ -519,14 +543,79 @@
   text-align: center;
 }
 
-.staleBadge {
+/* Notes over the preview: the last layout change, and whether it is current. */
+.stageNotes {
   position: absolute;
   bottom: 14px;
   left: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 28px));
+  pointer-events: none;
+}
+
+.layoutNote {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: min(560px, calc(100% - 28px));
+  max-width: 100%;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.25);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  pointer-events: auto;
+}
+
+.layoutNote[data-tone='ok'] .staleIcon {
+  background: var(--accent);
+}
+
+.layoutNote[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--kind-cloud) 70%, transparent);
+  background: color-mix(in srgb, var(--kind-cloud) 12%, var(--bg-elevated));
+}
+
+.layoutNote[data-tone='error'] .staleIcon {
+  background: var(--kind-cloud);
+}
+
+.layoutNoteText {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 2px;
+}
+
+.noteButton {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.noteButton:hover,
+.noteButton:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.staleBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
   margin: 0;
   padding: 6px 12px 6px 6px;
   border: 1px solid color-mix(in srgb, var(--link) 70%, transparent);

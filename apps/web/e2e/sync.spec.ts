@@ -128,7 +128,9 @@ test('folder sync: connect imports folder diagrams and writes yours, then keeps 
   await expect(page.getByTestId('pg-folder-message')).toContainText('1 updated from the folder');
   await expect.poll(async () => JSON.parse(await editor.inputValue()).meta.title).toBe('Edited on disk');
 
-  // Deleting a diagram also deletes its file.
+  // Deleting a diagram also deletes its file. (Let the re-render settle first:
+  // Chrome closes a confirm() when a preview frame commits a load under it.)
+  await expect(page.getByTestId('pg-preview-next')).toHaveCount(0);
   page.on('dialog', (dialog) => dialog.accept());
   await page.getByTestId('pg-delete').click();
   await expect.poll(async () => Object.keys(await folderFiles(page)).sort()).toEqual(['package.json', 'payments-flow.workflow.json']);
@@ -233,7 +235,8 @@ test('GitHub sync: pull, commit one, commit all changes, delete — with the tok
   expect(JSON.parse(repo.files.get('diagrams/team-web-app.architecture.json')!.text).meta.title).toBe('Team web app v2');
   expect(repo.commits).toEqual(['vc-archify: add Team web app', 'vc-archify: update Team web app']);
 
-  // Delete locally and on GitHub.
+  // Delete locally and on GitHub (after the re-render settles, see above).
+  await expect(page.getByTestId('pg-preview-next')).toHaveCount(0);
   page.on('dialog', (dialog) => dialog.accept());
   await page.getByTestId('pg-delete').click();
   await expect.poll(() => repo.files.has('diagrams/team-web-app.architecture.json')).toBe(false);

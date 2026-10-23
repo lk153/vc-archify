@@ -73,6 +73,21 @@ It needs Google Chrome and free ports 3107 and 3108 (`E2E_PORT=… SMOKE_PORT=�
 - **Built-in examples** (the "Examples · …" groups in the Diagram picker) are the JSON files in [`examples/`](examples/). They are rendered and checked at build time and served read-only at `/examples/<file>.json`.
 - **My diagrams** (the first group in the picker) are kept in your browser's `localStorage`, for this browser and device only. You add them with **+ New…** (starts from a template of that type), **Import JSON** (one or more `.json` IR files, e.g. ones your agent wrote with the skill), or **Save to My diagrams** (keeps your edits to an example or draft). They save automatically as you edit; rename or delete them in the panel. Use **Download JSON** to back up or move a diagram. A downloaded `.html` can't be imported, because it doesn't contain the source IR.
 
+### Rearrange a diagram by dragging
+
+With **Drag to rearrange** on (the default), drag nodes in the preview and the IR JSON is updated, then re-rendered:
+
+| Type | What you can drag | What changes in the JSON |
+|---|---|---|
+| Architecture | components; a boundary by its label or border (moves everything it `wraps`) | `pos` (snapped to 10 units; hold Alt to place freely), or `row`/`col` in a grid layout |
+| ERD | tables | `pos`, or `row`/`col` in a grid layout (dropping on another table swaps them) |
+| Workflow | nodes; a group by its border (moves its nodes) | `lane` and `col` |
+| Dataflow | nodes | `stage` and `row` |
+
+Sequence and lifecycle diagrams are laid out by the engine, so they are not draggable. Routes follow the move: hand-placed `via` points slide with the node they lead into, and hand-placed label offsets are dropped so the engine places the label again. Only the values that change are rewritten; the rest of the file keeps its formatting.
+
+If the engine rejects the new position (overlap, a route through another node, and so on), the move is undone and the note says why; **Apply anyway** keeps it so you can fix the rest by hand. **Undo move** / **Redo** (or Ctrl/⌘ + Z / Shift + Z with the preview focused) step through moves. With a node focused, Alt/⌥ + arrow keys nudge it (Shift: 5 steps). The preview keeps your zoom across re-renders.
+
 ### Sync My diagrams (optional)
 
 Open **Sync** in the panel. Both targets can be on at the same time.

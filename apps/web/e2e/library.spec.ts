@@ -76,6 +76,7 @@ test('a new diagram starts from a template, and can be deleted', async ({ page }
   await expect(preview(page).locator('h1')).toHaveText('Untitled sequence diagram');
   await expect(savedOptions(page)).toHaveCount(1);
 
+  await expect(page.getByTestId('pg-preview-next')).toHaveCount(0); // see sync.spec: a frame load closes confirm()
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByTestId('pg-delete').click();
   await expect(savedOptions(page)).toHaveCount(0);
