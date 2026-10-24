@@ -13,6 +13,8 @@
   --border-strong: #334155;
   --text: #f1f5f9;
   --text-muted: #94a3b8;
+  /* Dropdown chevron in --text-muted (a data URI cannot read the variable). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --text-dim: #64748b;
   --accent: #34d399;
   --accent-strong: #10b981;
@@ -49,6 +51,7 @@
   --border-strong: #cbd5e1;
   --text: #0f172a;
   --text-muted: #475569;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23475569' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --text-dim: #64748b;
   --accent: #059669;
   --accent-strong: #047857;
@@ -78,6 +81,7 @@
     --border-strong: #cbd5e1;
     --text: #0f172a;
     --text-muted: #475569;
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23475569' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     --text-dim: #64748b;
     --accent: #059669;
     --accent-strong: #047857;
