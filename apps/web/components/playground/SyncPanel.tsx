@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { hashText, type SavedDiagram } from './library';
-import type { DiagramSync } from './sync/useDiagramSync';
+import { fileNameState, hashText, type SavedDiagram } from './library';
+import type { DiagramSync, SyncProgress } from './sync/useDiagramSync';
+import { ProgressBar } from './Toasts';
 import type { GitHubSettings } from './sync/github';
 import styles from './Playground.module.css';
 
@@ -16,12 +17,29 @@ interface Props {
 export function syncBadges(sync: DiagramSync, d: SavedDiagram): string[] {
   const badges: string[] = [];
   if (sync.folder.state === 'connected' || sync.folder.state === 'busy') {
-    badges.push(d.folder && hashText(d.text) === d.folder.hash ? 'Folder ✓' : 'Folder: saving…');
+    badges.push(d.folder && hashText(d.text) === d.folder.hash && fileNameState(d.folder, d) !== 'rename' ? 'Folder ✓' : 'Folder: changes pending');
   }
   if (sync.github.configured) {
-    badges.push(!d.github ? 'GitHub: not committed' : hashText(d.text) === d.github.hash ? 'GitHub ✓' : 'GitHub: uncommitted changes');
+    badges.push(!d.github
+      ? 'GitHub: not committed'
+      : hashText(d.text) !== d.github.hash
+        ? 'GitHub: uncommitted changes'
+        : fileNameState(d.github, d) === 'rename' ? 'GitHub: rename not committed' : 'GitHub ✓');
   }
   return badges;
+}
+
+/** The running sync of one target: its label, count and bar. */
+function Activity({ progress, testId }: { progress: SyncProgress; testId: string }) {
+  return (
+    <div className={styles.syncActivity} data-testid={testId}>
+      <p className={styles.syncMessage}>
+        {progress.title}
+        {progress.total ? ` ${progress.done} / ${progress.total}` : ''}
+      </p>
+      <ProgressBar done={progress.done} total={progress.total} label={progress.title} />
+    </div>
+  );
 }
 
 export function SyncPanel({ sync, current, disabled }: Props) {
@@ -36,12 +54,19 @@ export function SyncPanel({ sync, current, disabled }: Props) {
     folder.state === 'connected' || folder.state === 'busy' ? `Folder: ${folder.name}` : folder.state === 'needs-permission' ? 'Folder: reconnect' : '',
     github.configured ? `GitHub: ${github.settings.repo}` : '',
   ].filter(Boolean).join(' · ') || 'Off';
+  // Shown on the summary too, so a sync is visible while the panel is closed.
+  const running = folder.progress ?? github.progress;
 
   return (
-    <details className={styles.sync} data-testid="pg-sync">
+    <details className={styles.sync} data-testid="pg-sync" data-syncing={running ? 'true' : undefined}>
       <summary>
         <span>Sync</span>
-        <span className={styles.syncSummary}>{summary}</span>
+        <span className={styles.syncSummary}>{running ? 'Syncing…' : summary}</span>
+        {running && (
+          <span className={styles.syncSummaryBar}>
+            <ProgressBar done={running.done} total={running.total} label={running.title} slim />
+          </span>
+        )}
       </summary>
 
       <section className={styles.syncSection} aria-labelledby={`${ids}-folder`}>
@@ -51,8 +76,8 @@ export function SyncPanel({ sync, current, disabled }: Props) {
         ) : folder.state === 'disconnected' ? (
           <>
             <p className={styles.libraryHint}>
-              Every diagram in My diagrams is written to the folder as a <code>.json</code> file and kept up to date as you edit. JSON
-              diagrams added to the folder show up here on the next sync.
+              Every diagram in My diagrams is written to the folder as a <code>.json</code> file, 10 seconds after you stop editing
+              (Sync now writes at once). JSON diagrams added to the folder show up here on the next sync.
             </p>
             <div className={styles.row}>
               <button type="button" className={`button ${styles.small}`} onClick={() => void folder.connect()} disabled={disabled} data-testid="pg-folder-connect">
@@ -80,7 +105,11 @@ export function SyncPanel({ sync, current, disabled }: Props) {
             </button>
           </div>
         )}
-        {folder.message && <p className={styles.syncMessage} role="status" data-testid="pg-folder-message">{folder.message}</p>}
+        {folder.progress ? (
+          <Activity progress={folder.progress} testId="pg-folder-progress" />
+        ) : (
+          folder.message && <p className={styles.syncMessage} data-testid="pg-folder-message">{folder.message}</p>
+        )}
       </section>
 
       <section className={styles.syncSection} aria-labelledby={`${ids}-github`}>
@@ -147,7 +176,11 @@ export function SyncPanel({ sync, current, disabled }: Props) {
             </button>
           </div>
         )}
-        {github.message && <p className={styles.syncMessage} role="status" data-testid="pg-gh-message">{busy ? 'Working…' : github.message}</p>}
+        {github.progress ? (
+          <Activity progress={github.progress} testId="pg-gh-progress" />
+        ) : (
+          github.message && <p className={styles.syncMessage} data-testid="pg-gh-message">{github.message}</p>
+        )}
       </section>
     </details>
   );

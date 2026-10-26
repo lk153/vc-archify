@@ -14,6 +14,7 @@ import { applyMove, dragConfig, parseMoveMessage, type MoveRequest } from './lay
 import { PLAYGROUND_MESSAGE_SOURCE, PREVIEW_MESSAGE_SOURCE, parseCamera, withEditLayer, type PreviewCamera } from './layout/editLayer';
 import { withPreviewTheme, type PreviewTheme, type ResolvedTheme } from './previewTheme';
 import { SyncPanel, syncBadges } from './SyncPanel';
+import { ToastViewport, useToasts } from './Toasts';
 import { useDiagramSync } from './sync/useDiagramSync';
 import styles from './Playground.module.css';
 
@@ -363,9 +364,11 @@ export function Playground({ examples, defaultSource }: Props) {
   }, [updateLibrary]);
 
   // Folder and GitHub sync. When a pull replaces the open diagram, reload the editor.
+  const toasts = useToasts();
   const sync = useDiagramSync({
     library,
     updateLibrary,
+    startTask: toasts.task,
     onExternalChange: (ids, next) => {
       const openId = savedIdOf(sourceRef.current);
       const entry = openId && ids.includes(openId) ? next.find((d) => d.id === openId) : undefined;
@@ -1258,6 +1261,7 @@ export function Playground({ examples, defaultSource }: Props) {
           </div>
         </div>
       </section>
+      <ToastViewport toasts={toasts.toasts} onDismiss={toasts.dismiss} />
     </div>
   );
 }

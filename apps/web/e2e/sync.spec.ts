@@ -16,6 +16,7 @@ const withTitle = (file: string, title: string) => {
 };
 
 const status = (page: Page) => page.getByTestId('pg-status');
+const lastToast = (page: Page) => page.getByTestId('pg-toast').last();
 const savedOptions = (page: Page) => page.getByTestId('pg-example').locator('optgroup[label="My diagrams"] option');
 
 async function open(page: Page) {
@@ -95,10 +96,18 @@ test('folder sync: connect imports folder diagrams and writes yours, then keeps 
     'payments-flow.workflow.json': withTitle('agent-tool-call.workflow.json', 'Payments flow (from folder)'),
     'package.json': '{"name": "not a diagram"}',
   });
+  await page.clock.install(); // folder writes wait FOLDER_WRITE_DELAY_MS; fast-forward instead of waiting
   await open(page);
   await saveCurrentExample(page, 'My platform map');
 
   await page.getByTestId('pg-folder-connect').click();
+  // The sync shows a progress toast, which turns into its result.
+  await expect(lastToast(page)).toHaveAttribute('data-tone', 'progress');
+  await expect(lastToast(page).getByRole('progressbar')).toBeVisible();
+  await expect(page.getByTestId('pg-sync')).toHaveAttribute('data-syncing', 'true');
+  await expect(lastToast(page)).toHaveAttribute('data-tone', 'ok');
+  await expect(lastToast(page)).toContainText('Synced: 2 files in “my-diagrams” · 1 added to My diagrams · 1 file written');
+  await expect(page.getByTestId('pg-sync')).not.toHaveAttribute('data-syncing', 'true');
   await expect(page.getByTestId('pg-folder-message')).toContainText('1 added to My diagrams');
   await expect(page.getByTestId('pg-folder-message')).toContainText('1 non-diagram JSON ignored');
   await expect(page.getByTestId('pg-folder-name')).toContainText('my-diagrams');
@@ -107,22 +116,59 @@ test('folder sync: connect imports folder diagrams and writes yours, then keeps 
     ['my-platform-map.architecture.json', 'package.json', 'payments-flow.workflow.json'],
   );
 
-  // Edits are written through to the folder.
+  // Edits are written to the folder 10 seconds after editing stops, not before.
   const editor = page.getByTestId('pg-editor');
+  const titleOnDisk = async (file: string) => JSON.parse((await folderFiles(page))[file]).meta.title;
   const ir = JSON.parse(await editor.inputValue());
   ir.meta.title = 'My platform map v2';
   await editor.fill(`${JSON.stringify(ir, null, 2)}\n`);
-  await expect.poll(async () => JSON.parse((await folderFiles(page))['my-platform-map.architecture.json']).meta.title, { timeout: 10_000 })
-    .toBe('My platform map v2');
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder: changes pending');
+  await page.clock.fastForward(8_000);
+  expect(await titleOnDisk('my-platform-map.architecture.json')).toBe('My platform map');
+  await page.clock.fastForward(2_500);
+  await expect.poll(() => titleOnDisk('my-platform-map.architecture.json')).toBe('My platform map v2');
   await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder ✓');
+  await expect(lastToast(page)).toContainText('Saved 1 diagram to “my-diagrams”.');
+
+  // Renaming the diagram renames its file.
+  await page.getByTestId('pg-name').fill('Team platform map');
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder: changes pending');
+  await page.clock.fastForward(10_500);
+  await expect.poll(async () => Object.keys(await folderFiles(page)).sort()).toEqual(
+    ['package.json', 'payments-flow.workflow.json', 'team-platform-map.architecture.json'],
+  );
+  await expect(lastToast(page)).toContainText('Saved 1 diagram to “my-diagrams” (1 file renamed).');
+  expect(JSON.parse((await folderFiles(page))['team-platform-map.architecture.json']).meta.title).toBe('My platform map v2');
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder ✓');
+  await page.getByTestId('pg-folder-sync').click();
+  await expect(page.getByTestId('pg-folder-message')).toContainText('Synced:');
+  expect(Object.keys(await folderFiles(page))).toHaveLength(3);
+
+  // Sync now, and leaving the tab, write pending changes at once.
+  ir.meta.title = 'My platform map v3';
+  await editor.fill(`${JSON.stringify(ir, null, 2)}\n`);
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder: changes pending');
+  await page.getByTestId('pg-folder-sync').click();
+  await expect.poll(() => titleOnDisk('team-platform-map.architecture.json')).toBe('My platform map v3');
+  ir.meta.title = 'My platform map v4';
+  await editor.fill(`${JSON.stringify(ir, null, 2)}\n`);
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('Folder: changes pending');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => titleOnDisk('team-platform-map.architecture.json')).toBe('My platform map v4');
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  });
 
   // A change made in the folder (an agent, git pull…) comes back with "Sync now".
   await page.evaluate(() => {
     const files = (window as unknown as { __memFolder: Map<string, { text: string; lastModified: number }> }).__memFolder;
-    const file = files.get('my-platform-map.architecture.json')!;
+    const file = files.get('team-platform-map.architecture.json')!;
     const ir = JSON.parse(file.text);
     ir.meta.title = 'Edited on disk';
-    files.set('my-platform-map.architecture.json', { text: `${JSON.stringify(ir, null, 2)}\n`, lastModified: Date.now() });
+    files.set('team-platform-map.architecture.json', { text: `${JSON.stringify(ir, null, 2)}\n`, lastModified: Date.now() });
   });
   await page.getByTestId('pg-folder-sync').click();
   await expect(page.getByTestId('pg-folder-message')).toContainText('1 updated from the folder');
@@ -220,7 +266,9 @@ test('GitHub sync: pull, commit one, commit all changes, delete — with the tok
   await saveCurrentExample(page, 'Team web app');
   await expect(page.getByTestId('pg-sync-badges')).toContainText('GitHub: not committed');
   await page.getByTestId('pg-gh-commit').click();
+  await expect(page.getByTestId('pg-gh-progress')).toContainText('Committing to lk153/my-diagrams…');
   await expect(page.getByTestId('pg-gh-message')).toContainText('Committed 1 diagram to lk153/my-diagrams@main');
+  await expect(lastToast(page)).toContainText('Committed 1 diagram to lk153/my-diagrams@main');
   expect(JSON.parse(repo.files.get('diagrams/team-web-app.architecture.json')!.text).meta.title).toBe('Team web app');
   await expect(page.getByTestId('pg-sync-badges')).toContainText('GitHub ✓');
 
@@ -235,12 +283,22 @@ test('GitHub sync: pull, commit one, commit all changes, delete — with the tok
   expect(JSON.parse(repo.files.get('diagrams/team-web-app.architecture.json')!.text).meta.title).toBe('Team web app v2');
   expect(repo.commits).toEqual(['vc-archify: add Team web app', 'vc-archify: update Team web app']);
 
+  // Renaming the diagram renames its file on the next commit.
+  await page.getByTestId('pg-name').fill('Team platform');
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('GitHub: rename not committed');
+  await page.getByTestId('pg-gh-commit').click();
+  await expect(page.getByTestId('pg-gh-message')).toContainText('renamed diagrams/team-web-app.architecture.json to diagrams/team-platform.architecture.json');
+  expect(repo.files.has('diagrams/team-web-app.architecture.json')).toBe(false);
+  expect(JSON.parse(repo.files.get('diagrams/team-platform.architecture.json')!.text).meta.title).toBe('Team web app v2');
+  expect(repo.commits.slice(-2)).toEqual(['vc-archify: rename Team web app to Team platform', 'vc-archify: rename Team web app to Team platform']);
+  await expect(page.getByTestId('pg-sync-badges')).toContainText('GitHub ✓');
+
   // Delete locally and on GitHub (after the re-render settles, see above).
   await expect(page.getByTestId('pg-preview-next')).toHaveCount(0);
   page.on('dialog', (dialog) => dialog.accept());
   await page.getByTestId('pg-delete').click();
-  await expect.poll(() => repo.files.has('diagrams/team-web-app.architecture.json')).toBe(false);
-  expect(repo.commits.at(-1)).toBe('vc-archify: delete Team web app');
+  await expect.poll(() => repo.files.has('diagrams/team-platform.architecture.json')).toBe(false);
+  expect(repo.commits.at(-1)).toBe('vc-archify: delete Team platform');
 
   expect(repo.auth.every((h) => h === 'Bearer github_pat_test')).toBe(true);
 });
@@ -286,4 +344,9 @@ test('GitHub sync: a bad token is explained', async ({ page }) => {
   await page.getByTestId('pg-gh-save').click();
   await page.getByTestId('pg-gh-test').click();
   await expect(page.getByTestId('pg-gh-message')).toContainText('GitHub 401: the token is invalid or expired (Bad credentials)');
+  await expect(lastToast(page)).toHaveAttribute('data-tone', 'error');
+  await expect(lastToast(page)).toHaveAttribute('role', 'alert');
+  await expect(lastToast(page)).toContainText('GitHub 401');
+  await lastToast(page).getByRole('button', { name: 'Dismiss notification' }).click();
+  await expect(page.getByTestId('pg-toast')).toHaveCount(0);
 });

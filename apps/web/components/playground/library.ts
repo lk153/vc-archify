@@ -8,6 +8,8 @@ export interface FolderLink {
   /** hashText() of the content last written to / read from the file. */
   hash: string;
   syncedAt: number;
+  /** The diagram name the file is named after; renaming the diagram moves the file. */
+  name?: string;
 }
 
 /** Link to the diagram's file in the configured GitHub repository. */
@@ -18,6 +20,8 @@ export interface GitHubLink {
   /** hashText() of the content last committed / pulled. */
   hash: string;
   syncedAt: number;
+  /** The diagram name the file is named after; renaming the diagram moves the file. */
+  name?: string;
 }
 
 export interface SavedDiagram {
@@ -45,12 +49,37 @@ export function hashText(text: string): string {
 const slug = (value: string) =>
   value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 
+type Named = Pick<SavedDiagram, 'name' | 'type'>;
+const fileStem = (diagram: Named) => `${slug(diagram.name) || 'diagram'}${diagram.type ? `.${slug(diagram.type)}` : ''}`;
+const baseName = (file: string) => (file.split('/').pop() ?? '').toLowerCase();
+
 /** A file name such as `billing-schema.erd.json`, unique among `taken`. */
-export function fileNameFor(diagram: Pick<SavedDiagram, 'name' | 'type'>, taken: Set<string>): string {
-  const stem = `${slug(diagram.name) || 'diagram'}${diagram.type ? `.${slug(diagram.type)}` : ''}`;
+export function fileNameFor(diagram: Named, taken: Set<string>): string {
+  const stem = fileStem(diagram);
   let name = `${stem}.json`;
   for (let n = 2; taken.has(name.toLowerCase()); n += 1) name = `${stem}-${n}.json`;
   return name;
+}
+
+/** True when `file` (a name or a path) is what fileNameFor() gives this diagram, with or without a `-2`… suffix. */
+export function fileMatchesName(file: string, diagram: Named): boolean {
+  const base = baseName(file);
+  const stem = fileStem(diagram).toLowerCase();
+  return base === `${stem}.json` || (base.startsWith(`${stem}-`) && /^\d+\.json$/.test(base.slice(stem.length + 1)));
+}
+
+/**
+ * Whether a synced file still fits the diagram's name: `ok`; `stamp` (fits, but
+ * the link should remember the current name); or `rename` (move the file).
+ * Links made before they remembered a name: a file the app named after another
+ * name (`<name>.<type>.json`) is renamed; a file named by someone else is kept.
+ */
+export function fileNameState(link: { file?: string; path?: string; name?: string }, diagram: Named): 'ok' | 'stamp' | 'rename' {
+  if (!diagram.name.trim()) return 'ok';
+  const file = link.file ?? link.path ?? '';
+  if (fileMatchesName(file, diagram)) return link.name === diagram.name ? 'ok' : 'stamp';
+  if (link.name !== undefined) return link.name === diagram.name ? 'ok' : 'rename';
+  return diagram.type && baseName(file).endsWith(`.${slug(diagram.type)}.json`) ? 'rename' : 'stamp';
 }
 
 /** Display name for a diagram read from a file: its meta.title, else the file name. */
