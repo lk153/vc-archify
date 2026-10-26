@@ -420,6 +420,11 @@
   gap: 8px;
 }
 
+.editorActions {
+  display: flex;
+  gap: 6px;
+}
+
 .muted {
   margin: 0;
   color: var(--text-dim);
@@ -1039,3 +1044,209 @@
   background: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text);
 }
+
+/* ---------------------------------------------------------- editor window -- */
+
+.editorDialog {
+  position: fixed;
+  inset: auto;
+  width: 86vw;
+  height: 86vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 64px rgba(2, 6, 23, 0.45);
+  color: var(--text);
+}
+
+.editorDialog[data-maximized='true'] {
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Light, so the preview behind stays readable while you edit. */
+.editorDialog::backdrop {
+  background: rgba(2, 6, 23, 0.32);
+}
+
+.editorWindow {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.editorWindowBar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+}
+
+.editorDialog[data-maximized='true'] .editorWindowBar {
+  cursor: default;
+}
+
+.editorWindowTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.windowButton {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.windowButton:hover,
+.windowButton:focus-visible {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
+
+.editorWindowText {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  padding: 12px 16px;
+  border: 0;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+  resize: none;
+}
+
+.editorWindowText[data-wrap='true'] {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.editorWindowText::selection {
+  background: color-mix(in srgb, var(--focus) 40%, transparent);
+}
+
+.editorWindowProblems {
+  display: grid;
+  flex: none;
+  gap: 4px;
+  max-height: 30%;
+  margin: 0;
+  padding: 8px 14px;
+  overflow: auto;
+  border-top: 1px solid color-mix(in srgb, var(--kind-security) 45%, var(--border));
+  background: color-mix(in srgb, var(--kind-security) 7%, var(--bg-elevated));
+  font-size: 0.8rem;
+  list-style: none;
+}
+
+.editorWindowProblems li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.editorWindowFoot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  padding: 4px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.editorWindowFoot .check {
+  min-height: 28px;
+  font-size: 0.76rem;
+}
+
+.editorWindowStatus {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.editorWindowStatus[data-state='error'] {
+  color: var(--kind-security);
+}
+
+.editorWindowCaret {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Edges and corners resize the window; they straddle its border. */
+.resizeHandle {
+  position: absolute;
+  z-index: 1;
+}
+
+.resizeHandle[data-edge='n'],
+.resizeHandle[data-edge='s'] {
+  right: 10px;
+  left: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resizeHandle[data-edge='e'],
+.resizeHandle[data-edge='w'] {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.resizeHandle[data-edge='n'] { top: -4px; }
+.resizeHandle[data-edge='s'] { bottom: -4px; }
+.resizeHandle[data-edge='e'] { right: -4px; }
+.resizeHandle[data-edge='w'] { left: -4px; }
+
+.resizeHandle[data-edge='ne'],
+.resizeHandle[data-edge='nw'],
+.resizeHandle[data-edge='se'],
+.resizeHandle[data-edge='sw'] {
+  width: 16px;
+  height: 16px;
+}
+
+.resizeHandle[data-edge='nw'] { top: -6px; left: -6px; cursor: nwse-resize; }
+.resizeHandle[data-edge='se'] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.resizeHandle[data-edge='ne'] { top: -6px; right: -6px; cursor: nesw-resize; }
+.resizeHandle[data-edge='sw'] { bottom: -6px; left: -6px; cursor: nesw-resize; }

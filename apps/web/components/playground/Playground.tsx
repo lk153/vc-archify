@@ -13,6 +13,7 @@ import {
 import { applyMove, dragConfig, parseMoveMessage, type MoveRequest } from './layout/applyMove';
 import { PLAYGROUND_MESSAGE_SOURCE, PREVIEW_MESSAGE_SOURCE, parseCamera, withEditLayer, type PreviewCamera } from './layout/editLayer';
 import { withPreviewTheme, type PreviewTheme, type ResolvedTheme } from './previewTheme';
+import { EditorWindow, type TextSelection } from './EditorWindow';
 import { SyncPanel, syncBadges } from './SyncPanel';
 import { ToastViewport, useToasts } from './Toasts';
 import { useDiagramSync } from './sync/useDiagramSync';
@@ -183,6 +184,8 @@ export function Playground({ examples, defaultSource }: Props) {
   const [layoutNote, setLayoutNote] = useState<LayoutNote | null>(null);
   const [layoutBusy, setLayoutBusy] = useState(false);
   const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const [editorWindowOpen, setEditorWindowOpen] = useState(false);
+  const editorWindowSelection = useRef<TextSelection>({ start: 0, end: 0 });
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -1101,9 +1104,26 @@ export function Playground({ examples, defaultSource }: Props) {
               {currentSaved ? <span className={styles.muted}> · {currentSaved.name}</span> : null}
               {currentExample ? <span className={styles.muted}> · {currentExample.title}{edited ? ' (edited, not saved)' : ''}</span> : null}
             </label>
-            <button type="button" className={`button ${styles.tiny}`} onClick={formatJson} disabled={!ready}>
-              Format
-            </button>
+            <div className={styles.editorActions}>
+              <button type="button" className={`button ${styles.tiny}`} onClick={formatJson} disabled={!ready}>
+                Format
+              </button>
+              <button
+                type="button"
+                className={`button ${styles.tiny}`}
+                onClick={() => {
+                  const editor = editorRef.current;
+                  editorWindowSelection.current = { start: editor?.selectionStart ?? 0, end: editor?.selectionEnd ?? 0 };
+                  setEditorWindowOpen(true);
+                }}
+                disabled={!ready}
+                title="Edit the JSON in a large window you can resize or maximize"
+                aria-haspopup="dialog"
+                data-testid="pg-expand-editor"
+              >
+                <span aria-hidden="true">⤢</span> Expand
+              </button>
+            </div>
           </div>
           <textarea
             id={editorId}
@@ -1261,6 +1281,23 @@ export function Playground({ examples, defaultSource }: Props) {
           </div>
         </div>
       </section>
+      <EditorWindow
+        open={editorWindowOpen}
+        title={`IR JSON · ${currentSaved?.name ?? currentExample?.title ?? 'Unsaved draft'}`}
+        value={text}
+        onChange={onEdit}
+        onRender={() => void render(text)}
+        onFormat={formatJson}
+        status={statusText}
+        statusState={status.state}
+        diagnostics={diagnostics}
+        selection={editorWindowSelection.current}
+        onClose={({ start, end }) => {
+          setEditorWindowOpen(false);
+          // Back in the panel editor, the caret is where the window left it.
+          editorRef.current?.setSelectionRange(start, end);
+        }}
+      />
       <ToastViewport toasts={toasts.toasts} onDismiss={toasts.dismiss} />
     </div>
   );

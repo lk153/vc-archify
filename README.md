@@ -73,6 +73,10 @@ It needs Google Chrome and free ports 3107 and 3108 (`E2E_PORT=… SMOKE_PORT=�
 - **Built-in examples** (the "Examples · …" groups in the Diagram picker) are the JSON files in [`examples/`](examples/). They are rendered and checked at build time and served read-only at `/examples/<file>.json`.
 - **My diagrams** (the first group in the picker) are kept in your browser's `localStorage`, for this browser and device only. You add them with **+ New…** (starts from a template of that type), **Import JSON** (one or more `.json` IR files, e.g. ones your agent wrote with the skill), or **Save to My diagrams** (keeps your edits to an example or draft). They save automatically as you edit; rename or delete them in the panel. Use **Download JSON** to back up or move a diagram. A downloaded `.html` can't be imported, because it doesn't contain the source IR.
 
+### Edit the JSON in a larger window
+
+**Expand** (next to **Format** above the IR JSON editor) opens the same JSON in a window: drag its title bar to move it, drag any edge or corner to resize it, and use □ (or double-click the title bar) to maximize it to the whole browser window. It has Format, Render (Ctrl/⌘ + Enter), line wrapping, the caret's line and column, and the first problems with **Go to** links. Esc or × closes it; the panel editor then shows the same text with the caret where you left it. The window remembers its size, position and wrapping.
+
 ### Rearrange a diagram by dragging
 
 With **Drag to rearrange** on (the default), drag nodes in the preview and the IR JSON is updated, then re-rendered:
